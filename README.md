@@ -40,31 +40,32 @@ stalls first.
 
 ## Method, in one paragraph
 
-For each foundation model, take its frozen embedding, reduce to D dimensions
-via randomised-SVD PCA, and z-score each feature. Now form three candidate
-"basket" representations:
+For each foundation model, whiten its frozen embedding — either `zscore`
+(per-feature z-score at native width, the default) or `pca_zscore`
+(randomised-SVD PCA to D components, then z-score). Stack the M whitened
+views into `C = [Ẑ₁ | … | Ẑ_M] ∈ R^{N×MD}` and take its top-D left
+singular vectors scaled by their singular values: `S = U Σ`. This is the
+**MCCA shared latent** (Carroll/Kettenring MAX-VAR Generalized CCA) and
+is the primary output of `bazaar run` / `bazaar fit`. It is entirely
+unsupervised — the SVD sees only the per-model features, never the labels.
 
-1. **Naive mean** — straight elementwise mean across the 22 z-scored PCAs.
-2. **Procrustes / GPA-aligned mean** — iteratively rotate each model onto
-   the running consensus mean, then average. Closed-form per-iteration
-   rotation: `R = U V^T` where `U Σ V^T = SVD(A^T B)`.
-3. **MCCA shared latent** (Carroll/Kettenring MAX-VAR Generalized CCA) —
-   horizontally stack all M PCAs into `C = [Z₁ | … | Z_M] ∈ R^{N×MD}`,
-   take the top-D left singular vectors of C scaled by their singular
-   values.
+The fit stores the whitening artifacts and the right-singular-vector matrix
+`V = (Vᵀ)ᵀ ∈ R^{MD×D}`, so new data projects as `C_new @ V` without
+refitting.
 
-Then train a single linear probe (`StandardScaler` + `LinearRegression`)
-on each candidate against each physical property, with 1st/99th-percentile
-target clipping and a held-out test split of 5 000 galaxies, repeated for
-10 random seeds.
+The evaluation benchmark (`bazaar bench`) additionally compares against
+two alignment baselines that require equal-width views (`pca_zscore` mode):
 
-The headline finding: **MCCA wins every cell**. Procrustes wins every
-cell except JWST sSFR (where it ties the best single). Naive mean is
-catastrophic everywhere — averaging across un-aligned per-model PCA
-bases cancels signal instead of denoising it.
+1. **Naive mean** — elementwise mean across the 22 z-scored PCAs (catastrophic
+   without alignment — cancels signal across incompatible coordinate systems).
+2. **Procrustes / GPA-aligned mean** — iteratively rotate each view onto the
+   running consensus mean, then average (`R = U Vᵀ` from `SVD(AᵀB)`).
 
-See [`docs/method.md`](docs/method.md) for the algorithm details and
-[`docs/results.md`](docs/results.md) for the full D=128 / D=256 stats.
+The headline finding from the COSMOS-Web benchmark: **MCCA wins every cell**.
+Procrustes wins every cell except JWST sSFR. Naive mean is worst everywhere.
+
+See [`docs/method.md`](docs/method.md) for the full algorithm details and
+[`docs/results.md`](docs/results.md) for the D=128 / D=256 stats.
 
 ## Install
 
