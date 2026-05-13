@@ -95,4 +95,4 @@ plots, a 2×3 summary grid, and a stats table under `figs/`.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
