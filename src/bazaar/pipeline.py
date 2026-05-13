@@ -37,15 +37,46 @@ CATALOG_COLUMNS = {
 PROPERTIES = ["redshift", "mass", "sSFR"]
 
 
-def pca_and_zscore(E: np.ndarray, D: int, seed: int = 0) -> np.ndarray:
-    """PCA on full E (randomized SVD), then per-feature z-score."""
+def pca_zscore_fit(
+    E: np.ndarray, D: int, seed: int = 0,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Fit per-model PCA + per-feature z-score on E.
+
+    Returns
+    -------
+    Z         : (N, D_eff) float32 — whitened features on the fit data.
+    artifacts : dict with keys
+                  - pca_components : (D_eff, d_in)
+                  - pca_mean       : (d_in,)
+                  - zscore_mu      : (1, D_eff)
+                  - zscore_sd      : (1, D_eff)
+                Sufficient to reproduce Z via `pca_zscore_transform`.
+    """
     D_eff = min(D, E.shape[1], E.shape[0])
-    Z = PCA(
-        n_components=D_eff, svd_solver="randomized", random_state=seed,
-    ).fit_transform(E)
+    pca = PCA(n_components=D_eff, svd_solver="randomized", random_state=seed)
+    Z = pca.fit_transform(E)
     mu = Z.mean(axis=0, keepdims=True)
     sd = Z.std(axis=0, keepdims=True) + 1e-8
-    return ((Z - mu) / sd).astype(np.float32)
+    artifacts = {
+        "pca_components": pca.components_.astype(np.float32),
+        "pca_mean":       pca.mean_.astype(np.float32),
+        "zscore_mu":      mu.astype(np.float32),
+        "zscore_sd":      sd.astype(np.float32),
+    }
+    return ((Z - mu) / sd).astype(np.float32), artifacts
+
+
+def pca_zscore_transform(E: np.ndarray, artifacts: dict[str, np.ndarray]) -> np.ndarray:
+    """Apply saved PCA + z-score artifacts to (possibly new) embeddings."""
+    E64 = E.astype(np.float32, copy=False)
+    Z = (E64 - artifacts["pca_mean"]) @ artifacts["pca_components"].T
+    return ((Z - artifacts["zscore_mu"]) / artifacts["zscore_sd"]).astype(np.float32)
+
+
+def pca_and_zscore(E: np.ndarray, D: int, seed: int = 0) -> np.ndarray:
+    """Back-compat: PCA on full E (randomized SVD), then per-feature z-score."""
+    Z, _ = pca_zscore_fit(E, D=D, seed=seed)
+    return Z
 
 
 def catalog_pass(n_use: int) -> dict[str, np.ndarray]:

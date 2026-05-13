@@ -1,14 +1,16 @@
 """Alignment primitives for the basket-mean pipeline.
 
-Three operations:
+Operations:
 
 - `orthogonal_procrustes(A, B)`: closed-form rotation R minimising ||AR − B||_F.
 - `generalized_procrustes(mats)`: iterative GPA — rotate each matrix onto a
   consensus mean until the mean stabilises.
-- `mcca_basket(Zs, D)`: Carroll/Kettenring MAX-VAR Generalized CCA — the
-  shared latent that maximises sum-of-variances across all views.
+- `mcca_fit(Zs, D)`: Carroll/Kettenring MAX-VAR Generalized CCA — returns the
+  projector V (saved in a BazaarFit) and the fit-time shared latent S = C @ V.
+- `mcca_transform(Zs, V)`: apply a saved V to new per-model features.
+- `mcca_basket(Zs, D)`: back-compat wrapper that returns just the fit-time S.
 
-All three operate on already-whitened per-model PCA features (per-feature
+All operate on already-whitened per-model PCA features (per-feature
 z-scored, samples row-aligned). None of them touches the downstream
 labels; alignment is unsupervised.
 """
@@ -78,20 +80,52 @@ def generalized_procrustes(
     }
 
 
-def mcca_basket(Zs: list[np.ndarray], D: int, seed: int = 0) -> np.ndarray:
-    """Carroll/Kettenring MAX-VAR Generalized CCA shared latent.
+def mcca_fit(
+    Zs: list[np.ndarray], D: int, seed: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit Carroll/Kettenring MAX-VAR Generalized CCA.
 
-    Given per-model whitened features Z_m ∈ R^{N×D}, stack horizontally:
-        C = [Z_1 | Z_2 | ... | Z_M] ∈ R^{N × MD}
-    The MAX-VAR GCCA solution is the top-D left singular vectors of C,
-    scaled by their singular values: S = U[:, :D] @ diag(Σ[:D]).
+    Stack horizontally:  C = [Z_1 | Z_2 | ... | Z_M] ∈ R^{N × MD}.
+    Randomized SVD:      C ≈ U Σ Vh, retaining n_components = D.
 
-    Each Z_m must already be on comparable scale (per-feature z-scored).
-    Returns S ∈ R^{N × D}; intended as a third basket source alongside
-    the naive mean and the Procrustes-aligned mean.
+    The MAX-VAR GCCA shared latent on the fit data is S = U * sv = C @ V
+    (with V = Vh.T). We return V so that new data with the same per-model
+    PCA + z-score preprocessing can be projected via `mcca_transform`.
+
+    Returns
+    -------
+    V : (MD, D) float32 — projector. Save this in a BazaarFit.
+    S : (N, D)  float32 — fit-time shared latent, identical to the legacy
+        `mcca_basket(...)` output.
     """
     from sklearn.utils.extmath import randomized_svd
 
     C = np.concatenate(Zs, axis=1).astype(np.float32)
-    U, sv, _ = randomized_svd(C, n_components=D, random_state=seed)
-    return (U * sv).astype(np.float32)
+    U, sv, Vh = randomized_svd(C, n_components=D, random_state=seed)
+    V = Vh.T.astype(np.float32)
+    S = (U * sv).astype(np.float32)
+    return V, S
+
+
+def mcca_transform(Zs: list[np.ndarray], V: np.ndarray) -> np.ndarray:
+    """Apply a saved MCCA projector V to new per-model whitened features.
+
+    `Zs` must use the same basket order as `mcca_fit`. On fit data this is
+    bit-for-bit identical to the fit-time S (because C_fit @ V = U Σ Vh V =
+    U Σ when V comes from Vh).
+    """
+    if not Zs:
+        raise ValueError("mcca_transform requires at least one view")
+    C = np.concatenate(Zs, axis=1).astype(np.float32)
+    if C.shape[1] != V.shape[0]:
+        raise ValueError(
+            f"MCCA projector expects {V.shape[0]} concatenated features; "
+            f"got {C.shape[1]} (check basket order/D)."
+        )
+    return (C @ V).astype(np.float32)
+
+
+def mcca_basket(Zs: list[np.ndarray], D: int, seed: int = 0) -> np.ndarray:
+    """Back-compat: return the fit-time shared latent S only."""
+    _, S = mcca_fit(Zs, D=D, seed=seed)
+    return S
