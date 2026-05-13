@@ -1,7 +1,8 @@
-"""`bazaar run`, `plot`, `fit`, and `transform` entrypoints."""
+"""`bazaar run`, `plot`, `fit`, `transform`, and `embed` entrypoints."""
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -12,9 +13,37 @@ from bazaar.basket import (
     ensure_embeddings_downloaded,
     load_embeddings,
 )
+from bazaar.embed import embed_via_pu
 from bazaar.fit import BazaarFit
 from bazaar.pipeline import catalog_pass, run_modality
 from bazaar.plotting import render_plots
+
+DEFAULT_CACHE_DIR = Path.home() / ".cache" / "bazaar" / "embeds"
+
+
+def _resolve_emb_dir(args: argparse.Namespace) -> Path:
+    """Return the directory containing per-model .npy files.
+
+    Either pulls --emb-dir directly, or embeds via pu (--pu-path) into
+    --cache-dir and returns that. Errors if neither is given.
+    """
+    if args.emb_dir is not None:
+        return args.emb_dir
+    pu_path = args.pu_path or (Path(os.environ["PU_PATH"]) if "PU_PATH" in os.environ else None)
+    if pu_path is None:
+        raise SystemExit(
+            "must provide either --emb-dir (cached per-model embeddings) "
+            "or --pu-path (run pu to produce them); PU_PATH env var also OK"
+        )
+    cache_dir = args.cache_dir or DEFAULT_CACHE_DIR
+    embed_via_pu(
+        modality=args.modality,
+        pu_path=pu_path,
+        cache_dir=cache_dir,
+        basket=BASKET,
+        test=getattr(args, "test", False),
+    )
+    return cache_dir
 
 
 def _add_run_args(p: argparse.ArgumentParser) -> None:
@@ -64,8 +93,9 @@ def cmd_plot(args: argparse.Namespace) -> int:
 
 
 def cmd_fit(args: argparse.Namespace) -> int:
-    """Fit a BazaarFit from per-model embeddings already on disk and save it."""
-    embeddings = load_embeddings(BASKET, args.modality, args.emb_dir, n_use=args.n_use)
+    """Fit a BazaarFit from per-model embeddings and save it."""
+    emb_dir = _resolve_emb_dir(args)
+    embeddings = load_embeddings(BASKET, args.modality, emb_dir, n_use=args.n_use)
     print(f"[bazaar] Fitting BazaarFit (D={args.D}, seed={args.seed}) on "
           f"{len(BASKET)} models × {args.n_use} rows ({args.modality})...")
     fit = BazaarFit.fit(embeddings, basket=BASKET, D=args.D, seed=args.seed)
@@ -76,15 +106,33 @@ def cmd_fit(args: argparse.Namespace) -> int:
 
 
 def cmd_transform(args: argparse.Namespace) -> int:
-    """Apply a saved BazaarFit to per-model embeddings on disk."""
+    """Apply a saved BazaarFit to per-model embeddings."""
     fit = BazaarFit.load(args.fit)
-    embeddings = load_embeddings(fit.basket, args.modality, args.emb_dir, n_use=args.n_use)
+    emb_dir = _resolve_emb_dir(args)
+    embeddings = load_embeddings(fit.basket, args.modality, emb_dir, n_use=args.n_use)
     print(f"[bazaar] Applying fit ({args.fit}) to {len(fit.basket)} models × "
           f"{args.n_use} rows ({args.modality})...")
     S = fit.transform(embeddings)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.save(args.out, S)
     print(f"[bazaar] Wrote unified embedding {S.shape} → {args.out}")
+    return 0
+
+
+def cmd_embed(args: argparse.Namespace) -> int:
+    """Pre-warm the per-model embedding cache by shelling out to pu."""
+    pu_path = args.pu_path or Path(os.environ.get("PU_PATH", ""))
+    if not pu_path or not pu_path.exists():
+        raise SystemExit("--pu-path (or PU_PATH env var) must point to a pu checkout")
+    cache_dir = args.cache_dir or DEFAULT_CACHE_DIR
+    embed_via_pu(
+        modality=args.modality,
+        pu_path=pu_path,
+        cache_dir=cache_dir,
+        basket=BASKET,
+        test=args.test,
+    )
+    print(f"[bazaar] Embeddings cached under {cache_dir}")
     return 0
 
 
@@ -102,9 +150,19 @@ def main(argv: list[str] | None = None) -> int:
     plot_p.add_argument("--figs-dir", type=Path, default=Path("figs"))
     plot_p.set_defaults(func=cmd_plot)
 
+    def _add_source_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--emb-dir", type=Path, default=None,
+                       help="Directory of per-model .npy embeddings (skips pu run)")
+        p.add_argument("--pu-path", type=Path, default=None,
+                       help="Path to a pu checkout; runs pu to produce embeddings "
+                            "(falls back to env $PU_PATH)")
+        p.add_argument("--cache-dir", type=Path, default=None,
+                       help=f"Where pu embeddings are cached (default {DEFAULT_CACHE_DIR})")
+        p.add_argument("--test", action="store_true",
+                       help="Pass --test to pu run (small subset for smoke testing)")
+
     fit_p = sub.add_parser("fit", help="Fit a BazaarFit and save it to a directory")
-    fit_p.add_argument("--emb-dir", type=Path, required=True,
-                       help="Directory of per-model .npy embeddings")
+    _add_source_args(fit_p)
     fit_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
     fit_p.add_argument("--D", type=int, default=256)
     fit_p.add_argument("--seed", type=int, default=0)
@@ -115,15 +173,22 @@ def main(argv: list[str] | None = None) -> int:
 
     tr_p = sub.add_parser("transform",
                           help="Apply a saved BazaarFit to per-model embeddings")
+    _add_source_args(tr_p)
     tr_p.add_argument("--fit", type=Path, required=True,
                       help="Path to a saved BazaarFit directory")
-    tr_p.add_argument("--emb-dir", type=Path, required=True,
-                      help="Directory of per-model .npy embeddings")
     tr_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
     tr_p.add_argument("--n-use", type=int, default=45_000)
     tr_p.add_argument("--out", type=Path, required=True,
                       help="Output .npy path for the unified (N, D) embedding")
     tr_p.set_defaults(func=cmd_transform)
+
+    emb_p = sub.add_parser("embed",
+                           help="Pre-warm per-model embedding cache via pu run")
+    emb_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    emb_p.add_argument("--pu-path", type=Path, default=None)
+    emb_p.add_argument("--cache-dir", type=Path, default=None)
+    emb_p.add_argument("--test", action="store_true")
+    emb_p.set_defaults(func=cmd_embed)
 
     args = ap.parse_args(argv)
     return args.func(args)
