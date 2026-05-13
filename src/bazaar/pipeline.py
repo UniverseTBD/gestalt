@@ -18,13 +18,21 @@ from __future__ import annotations
 
 import numpy as np
 from datasets import load_dataset
-from pu.pu_datasets.cosmosweb import CATALOG_COLUMNS
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 from bazaar.align import generalized_procrustes, mcca_basket
 from bazaar.basket import DATASET, emb_npy_path
 from bazaar.probe import run_probe
+
+# Physics parameter → dataset column for Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2.
+CATALOG_COLUMNS = {
+    "redshift": "lephare_photozs",
+    "mag_g":    "mag_model_hsc-g",
+    "mag_r":    "mag_model_hsc-r",
+    "mass":     "lp_mass",
+    "sSFR":     "lp_ssfr",
+}
 
 PROPERTIES = ["redshift", "mass", "sSFR"]
 

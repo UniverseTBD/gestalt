@@ -68,9 +68,9 @@ cd the-bazaar
 uv sync          # or: pip install -e .
 ```
 
-The `pu` (`platonic-universe`) repo is pulled in automatically as a
-git-pinned dependency. Only `pu.pu_datasets.cosmosweb.CATALOG_COLUMNS`
-is used at runtime, so the import surface is tiny.
+No upstream-repo dependency — the code here is self-contained (the
+embeddings themselves are pulled from
+`huggingface.co/datasets/UniverseTBD/pu-embeddings` on first run).
 
 ## Run
 
