@@ -1,6 +1,6 @@
 [project]
 name = "the-bazaar"
-version = "0.1.0"
+version = "0.2.0"
 description = "Aligned-basket evaluation of foundation models on astronomical linear-probe tasks."
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -16,7 +16,18 @@ dependencies = [
     "matplotlib>=3.7",
     "huggingface_hub>=0.20",
     "pyarrow>=14.0",
+    # Image → embedding (vendored from platonic-universe)
+    "torch>=2.8.0",
+    "transformers>=4.55.0",
+    "astropt>=2.0.5",
+    "opencv-python>=4.11.0.86",
+    "scikit-image>=0.25.2",
+    "pillow>=11.0",
+    "torchvision>=0.20",
 ]
+
+[project.optional-dependencies]
+accelerate = ["accelerate>=1.0.0"]
 
 [project.scripts]
 bazaar = "bazaar.cli:main"
@@ -28,9 +39,17 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/bazaar"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/bazaar/embed/data/percentiles.json" = "bazaar/embed/data/percentiles.json"
+
 [tool.ruff]
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = ["E501"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

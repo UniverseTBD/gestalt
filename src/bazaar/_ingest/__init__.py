@@ -1,0 +1,14 @@
+"""Catalog ingest layer.
+
+`iter_galaxies(input)` returns a `CatalogSource` whose `.rows()` iterator
+yields `{f"{modality}_image": {"flux": ndarray, "band": [...]}}`-shaped dicts
+that `bazaar.embed.preprocess.PreprocessHF` consumes directly.
+
+Today only the HF-streaming adapter exists (HATS catalogs published on the
+Hugging Face Hub, including all MultimodalUniverse imagery datasets). A
+folder-of-PNGs or local-HATS adapter can drop in alongside without touching
+the rest of the pipeline.
+"""
+from bazaar._ingest.hf_streaming import CatalogSource, iter_galaxies
+
+__all__ = ["CatalogSource", "iter_galaxies"]

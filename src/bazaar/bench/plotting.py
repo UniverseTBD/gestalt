@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,11 +16,14 @@ PROPERTIES = ["redshift", "mass", "sSFR"]
 PROPERTY_LABELS = {"redshift": "z", "mass": r"$\log M_\star$", "sSFR": "sSFR"}
 MODALITIES = ["hsc", "jwst"]
 
-BASKET_SOURCES = ("basket_mean", "basket_procrustes_mean", "basket_mcca_mean")
+BASKET_SOURCES = (
+    "basket_mean", "basket_procrustes_mean", "basket_mcca_mean", "basket_concat_pca",
+)
 BASKET_STYLE = {
     "basket_mean":             dict(color="#d62728", label="naive mean"),
     "basket_procrustes_mean":  dict(color="#9467bd", label="Procrustes-aligned mean"),
     "basket_mcca_mean":        dict(color="#ff7f0e", label="MCCA shared latent"),
+    "basket_concat_pca":       dict(color="#17becf", label="concat → PCA-to-D"),
 }
 
 
@@ -76,10 +80,10 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
 
     stats_lines = [
         f"{'modality':<6}{'property':<10}"
-        f"{'naive_mean':>16}{'procrustes_mean':>22}{'mcca_mean':>22}"
+        f"{'naive_mean':>16}{'procrustes_mean':>22}{'mcca_mean':>22}{'concat_pca':>22}"
         f"{'best_single':>22}"
-        f"{'rank_naive':>12}{'rank_proc':>12}{'rank_mcca':>12}"
-        f"{'p_naive':>12}{'p_proc':>12}{'p_mcca':>12}"
+        f"{'rank_naive':>12}{'rank_proc':>12}{'rank_mcca':>12}{'rank_concat':>12}"
+        f"{'p_naive':>12}{'p_proc':>12}{'p_mcca':>12}{'p_concat':>12}"
     ]
 
     pdf_path = figs_dir / f"basket_vs_singles{suffix}.pdf"
@@ -103,9 +107,11 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
                 naive = baskets.get("basket_mean")
                 proc = baskets.get("basket_procrustes_mean")
                 mcca = baskets.get("basket_mcca_mean")
+                concat = baskets.get("basket_concat_pca")
                 rank_n, p_n = _rank_p(naive) if naive is not None else (-1, float("nan"))
                 rank_p, p_p = _rank_p(proc) if proc is not None else (-1, float("nan"))
                 rank_m, p_m = _rank_p(mcca) if mcca is not None else (-1, float("nan"))
+                rank_c, p_c = _rank_p(concat) if concat is not None else (-1, float("nan"))
 
                 def _fmt(arr):
                     if arr is None:
@@ -114,12 +120,13 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
 
                 stats_lines.append(
                     f"{modality:<6}{prop:<10}"
-                    f"{_fmt(naive)}{_fmt(proc)}{_fmt(mcca)}"
+                    f"{_fmt(naive)}{_fmt(proc)}{_fmt(mcca)}{_fmt(concat)}"
                     f"{means[best_name]:>14.3f} ({best_name[:8]:<8}) "
                     f"{rank_n:>4d}/{len(singles)+1}  "
                     f"{rank_p:>4d}/{len(singles)+1}  "
                     f"{rank_m:>4d}/{len(singles)+1}  "
-                    f"{p_n:>10.3g}  {p_p:>10.3g}  {p_m:>10.3g}"
+                    f"{rank_c:>4d}/{len(singles)+1}  "
+                    f"{p_n:>10.3g}  {p_p:>10.3g}  {p_m:>10.3g}  {p_c:>10.3g}"
                 )
 
                 fig, ax = plt.subplots(figsize=(12, 5.5))
@@ -129,7 +136,8 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
                            f"basket vs single models "
                            f"(naive {rank_n}/{len(singles)+1}, "
                            f"procrustes {rank_p}/{len(singles)+1}, "
-                           f"mcca {rank_m}/{len(singles)+1})"),
+                           f"mcca {rank_m}/{len(singles)+1}, "
+                           f"concat-pca {rank_c}/{len(singles)+1})"),
                 )
                 ax.legend(loc="lower right", fontsize=7)
                 fig.tight_layout()
@@ -147,7 +155,7 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
             )
             if i == 0 and j == 0:
                 axes[i, j].legend(loc="lower right", fontsize=6)
-    fig.suptitle("Basket-mean (naive, Procrustes-aligned, MCCA) "
+    fig.suptitle("Basket-mean (naive, Procrustes-aligned, MCCA, concat→PCA) "
                  "vs single-model $R^2$ — 45 000 COSMOS-Web galaxies",
                  fontsize=13)
     fig.tight_layout()

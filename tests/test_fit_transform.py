@@ -1,0 +1,171 @@
+"""Tests for BazaarFit fit/transform/save/load round-trips."""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from bazaar.align import mcca_fit
+from bazaar.fit import BazaarFit
+from bazaar.whiten import pca_zscore_fit
+
+
+def _synthetic_basket(
+    n: int = 4000, d: int = 64, D: int = 16, n_models: int = 4, seed: int = 0,
+) -> tuple[dict[str, np.ndarray], list[tuple[str, str]]]:
+    """A small basket with low-rank shared structure across views.
+
+    Random Gaussian factors drive each per-model embedding via a per-model
+    loading matrix, so PCA recovers the same subspace on each view.
+    """
+    rng = np.random.default_rng(seed)
+    factors = rng.standard_normal((n, D)).astype(np.float32)
+    basket = [("fam", f"m{i:02d}") for i in range(n_models)]
+    embeddings: dict[str, np.ndarray] = {}
+    for fam, size in basket:
+        W = rng.standard_normal((D, d)).astype(np.float32)
+        noise = 0.05 * rng.standard_normal((n, d)).astype(np.float32)
+        embeddings[f"{fam}_{size}"] = factors @ W + noise
+    return embeddings, basket
+
+
+def test_fit_stores_same_V_as_direct_mcca():
+    """BazaarFit.fit's V matches `mcca_fit` invoked on the same internal Zs."""
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
+
+    # Reconstruct the exact fit-time Zs (pca_zscore_fit, not _transform).
+    Zs_ref = [
+        pca_zscore_fit(embeddings[f"{f}_{s}"], D=16, seed=0)[0]
+        for f, s in basket
+    ]
+    V_ref, _ = mcca_fit(Zs_ref, D=16, seed=0)
+    np.testing.assert_array_equal(fit.mcca_V, V_ref)
+
+
+def test_transform_on_fit_data_recovers_subspace():
+    """`fit.transform(fit_E)` correlates ~1 with the fit-time S column-wise.
+
+    This is the practical "the saved transform reproduces the alignment"
+    invariant. It is *not* bit-identical because `pca_zscore_transform` is
+    a lossy reprojection (randomized-SVD approximation), but the column
+    space is preserved.
+    """
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
+
+    Zs_ref = [
+        pca_zscore_fit(embeddings[f"{f}_{s}"], D=16, seed=0)[0]
+        for f, s in basket
+    ]
+    _, S_ref = mcca_fit(Zs_ref, D=16, seed=0)
+    S_tr = fit.transform(embeddings)
+
+    # Column-wise correlation should be ~1 (sign-free).
+    for k in range(S_ref.shape[1]):
+        c = np.corrcoef(S_ref[:, k], S_tr[:, k])[0, 1]
+        assert abs(c) > 0.999, f"column {k}: |corr|={abs(c):.4f}"
+
+
+def test_save_load_round_trip(tmp_path):
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit.save(tmp_path / "fit")
+    reloaded = BazaarFit.load(tmp_path / "fit")
+
+    assert reloaded.D == fit.D
+    assert reloaded.seed == fit.seed
+    assert reloaded.basket == fit.basket
+    np.testing.assert_array_equal(reloaded.mcca_V, fit.mcca_V)
+    for key, art in fit.pca.items():
+        for ak, av in art.items():
+            np.testing.assert_array_equal(reloaded.pca[key][ak], av)
+
+    # Behaviourally identical
+    np.testing.assert_allclose(
+        reloaded.transform(embeddings), fit.transform(embeddings), atol=0,
+    )
+
+
+def test_held_out_transform_uses_same_basis(tmp_path):
+    """Held-out rows fed through transform live in the same subspace."""
+    embeddings, basket = _synthetic_basket(n=5000)
+    train = {k: v[:4000] for k, v in embeddings.items()}
+    test = {k: v[4000:] for k, v in embeddings.items()}
+
+    fit = BazaarFit.fit(train, basket=basket, D=16, seed=0)
+    S_test = fit.transform(test)
+
+    assert S_test.shape == (1000, 16)
+    assert np.all(np.isfinite(S_test))
+    # Each MCCA column should have nonzero spread on held-out data
+    # (matching the shared latent factors).
+    assert (S_test.std(axis=0) > 1e-2).all()
+
+
+def test_mismatched_basket_raises(tmp_path):
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    bad = {k: v for k, v in embeddings.items() if k != f"{basket[0][0]}_{basket[0][1]}"}
+    with pytest.raises(KeyError):
+        fit.transform(bad)
+
+
+def test_zscore_mode_round_trip(tmp_path):
+    """Whiten-mode='zscore' fits, transforms, saves, and loads end-to-end.
+
+    Differs from the default in that per-model widths stay at native d_m,
+    so V's row dim is M*d (not M*D), and the npz files only carry zscore
+    stats. Held-out transform must still produce well-conditioned columns.
+    """
+    embeddings, basket = _synthetic_basket(n=5000, d=64, D=16)
+    train = {k: v[:4000] for k, v in embeddings.items()}
+    test = {k: v[4000:] for k, v in embeddings.items()}
+
+    fit = BazaarFit.fit(train, basket=basket, D=16, seed=0, whiten_mode="zscore")
+    assert fit.whiten_mode == "zscore"
+    # Row dim of V is sum of per-model native widths (here: M * d).
+    assert fit.mcca_V.shape == (len(basket) * 64, 16)
+    # Per-model artifacts have only zscore stats — no PCA fields.
+    for art in fit.pca.values():
+        assert set(art.keys()) == {"zscore_mu", "zscore_sd"}
+
+    S_test = fit.transform(test)
+    assert S_test.shape == (1000, 16)
+    assert np.all(np.isfinite(S_test))
+    assert (S_test.std(axis=0) > 1e-2).all()
+
+    fit.save(tmp_path / "fit_zs")
+    reloaded = BazaarFit.load(tmp_path / "fit_zs")
+    assert reloaded.whiten_mode == "zscore"
+    np.testing.assert_array_equal(reloaded.mcca_V, fit.mcca_V)
+    np.testing.assert_allclose(
+        reloaded.transform(test), fit.transform(test), atol=0,
+    )
+
+
+def test_legacy_fit_without_whiten_mode_loads_as_pca_zscore(tmp_path):
+    """Fits saved before the whiten_mode field existed still load.
+
+    v1 fits without `whiten_mode` are pca_zscore by definition. We simulate
+    that legacy artifact by saving a pca_zscore fit, dropping the field, then
+    rolling schema_version back to 1.
+    """
+    import json
+
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
+    fit.save(tmp_path / "legacy")
+    meta_path = tmp_path / "legacy" / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta.pop("whiten_mode")
+    meta["schema_version"] = 1
+    meta_path.write_text(json.dumps(meta))
+
+    reloaded = BazaarFit.load(tmp_path / "legacy")
+    assert reloaded.whiten_mode == "pca_zscore"
+    np.testing.assert_allclose(
+        reloaded.transform(embeddings), fit.transform(embeddings), atol=0,
+    )

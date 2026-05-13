@@ -8,11 +8,13 @@
 >
 > *"Given enough aligned foundation models, all astronomy is linear."* — us, probably
 
-A small library + CLI that tests whether the **average embedding** from a
-heterogeneous basket of frozen foundation models outperforms any single
-model on a downstream linear-probe task. Currently configured for
-COSMOS-Web HSC × JWST imagery and three physical properties (redshift,
-log M★, sSFR), but the alignment and probe code is task-agnostic.
+A small library + CLI that aligns a heterogeneous basket of frozen
+foundation models into one shared embedding via MCCA, ships the fit so you
+can apply it to new data with one command, and (separately) tests whether
+that basket-mean beats any single model on a downstream linear-probe task.
+Currently wired up for COSMOS-Web HSC × JWST imagery and three physical
+properties (redshift, log M★, sSFR), but the alignment and probe code is
+task-agnostic.
 
 The Bazaar is a stall-by-stall view of representation learning: each
 foundation model brings its own goods (its own coordinate system on the
@@ -22,8 +24,8 @@ stalls first.
 
 ## What's in the basket
 
-22 checkpoints across 8 families, all pre-published as per-row embeddings
-on `huggingface.co/datasets/UniverseTBD/pu-embeddings/tree/main/cosmosweb`:
+22 checkpoints across 8 families, all bundled model adapters (no separate
+`pu` installation needed):
 
 | family       | sizes                       | count |
 |--------------|-----------------------------|-------|
@@ -38,31 +40,32 @@ on `huggingface.co/datasets/UniverseTBD/pu-embeddings/tree/main/cosmosweb`:
 
 ## Method, in one paragraph
 
-For each foundation model, take its frozen 45 000-row embedding, reduce
-to D dimensions via randomised-SVD PCA, and z-score each feature. Now
-form three candidate "basket" representations:
+For each foundation model, whiten its frozen embedding — either `zscore`
+(per-feature z-score at native width, the default) or `pca_zscore`
+(randomised-SVD PCA to D components, then z-score). Stack the M whitened
+views into `C = [Ẑ₁ | … | Ẑ_M] ∈ R^{N×MD}` and take its top-D left
+singular vectors scaled by their singular values: `S = U Σ`. This is the
+**MCCA shared latent** (Carroll/Kettenring MAX-VAR Generalized CCA) and
+is the primary output of `bazaar run` / `bazaar fit`. It is entirely
+unsupervised — the SVD sees only the per-model features, never the labels.
 
-1. **Naive mean** — straight elementwise mean across the 22 z-scored PCAs.
-2. **Procrustes / GPA-aligned mean** — iteratively rotate each model onto
-   the running consensus mean, then average. Closed-form per-iteration
-   rotation: `R = U V^T` where `U Σ V^T = SVD(A^T B)`.
-3. **MCCA shared latent** (Carroll/Kettenring MAX-VAR Generalized CCA) —
-   horizontally stack all M PCAs into `C = [Z₁ | … | Z_M] ∈ R^{N×MD}`,
-   take the top-D left singular vectors of C scaled by their singular
-   values.
+The fit stores the whitening artifacts and the right-singular-vector matrix
+`V = (Vᵀ)ᵀ ∈ R^{MD×D}`, so new data projects as `C_new @ V` without
+refitting.
 
-Then train a single linear probe (`StandardScaler` + `LinearRegression`)
-on each candidate against each physical property, with 1st/99th-percentile
-target clipping and a held-out test split of 5 000 galaxies, repeated for
-10 random seeds.
+The evaluation benchmark (`bazaar bench`) additionally compares against
+two alignment baselines that require equal-width views (`pca_zscore` mode):
 
-The headline finding: **MCCA wins every cell**. Procrustes wins every
-cell except JWST sSFR (where it ties the best single). Naive mean is
-catastrophic everywhere — averaging across un-aligned per-model PCA
-bases cancels signal instead of denoising it.
+1. **Naive mean** — elementwise mean across the 22 z-scored PCAs (catastrophic
+   without alignment — cancels signal across incompatible coordinate systems).
+2. **Procrustes / GPA-aligned mean** — iteratively rotate each view onto the
+   running consensus mean, then average (`R = U Vᵀ` from `SVD(AᵀB)`).
 
-See [`docs/method.md`](docs/method.md) for the algorithm details and
-[`docs/results.md`](docs/results.md) for the full D=128 / D=256 stats.
+The headline finding from the COSMOS-Web benchmark: **MCCA wins every cell**.
+Procrustes wins every cell except JWST sSFR. Naive mean is worst everywhere.
+
+See [`docs/method.md`](docs/method.md) for the full algorithm details and
+[`docs/results.md`](docs/results.md) for the D=128 / D=256 stats.
 
 ## Install
 
@@ -72,21 +75,84 @@ cd the-bazaar
 uv sync          # or: pip install -e .
 ```
 
-No upstream-repo dependency — the code here is self-contained (the
-embeddings themselves are pulled from
-`huggingface.co/datasets/UniverseTBD/pu-embeddings` on first run).
+## Use the bazaar on your own data
 
-## Run
+The top-level API is three verbs. Pass any HF dataset id (or local path)
+that `datasets.load_dataset` can open — bazaar streams images directly,
+infers the modality from the band list, and handles all embedding and
+alignment internally.
 
-```bash
-# Embeddings auto-download into data/embeddings/ on first run (~8 GB).
-bazaar run --D 256 --out data/results_pca256.parquet
-bazaar plot --data data/results_pca256.parquet --suffix _pca256
+### Python
+
+```python
+from bazaar import run, fit, load
+
+# Apply the shipped COSMOS-Web fit to any compatible catalog.
+embs = run("UniverseTBD/mmu_hsc_pdr3_dud_22.5")          # → (N, 1024) ndarray
+
+# Fit a fresh BazaarFit on your own corpus.
+fit_obj = fit("UniverseTBD/mmu_hsc_pdr3_dud_22.5", D=1024, out="fits/mine")
+
+# Reload a saved fit. The fit object is callable — fit_obj(input) is
+# shorthand for run(input, fit=fit_obj).
+fit_obj = load("fits/mine")
+embs = fit_obj("UniverseTBD/some_other_dataset")
 ```
 
-This will write a 1 500-row long-form parquet (modality × property ×
-seed × {naive, procrustes, mcca, 22×single}) plus per-modality strip
-plots, a 2×3 summary grid, and a stats table under `figs/`.
+Lower-level access (if you already have per-model embeddings as ndarrays):
+
+```python
+from bazaar import BASKET, BazaarFit
+
+fit_obj = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=256)
+fit_obj.save("fits/my-fit")
+
+# Later, anywhere:
+fit_obj = BazaarFit.load("fits/my-fit")
+unified = fit_obj.transform(new_per_model_embeddings)   # (N, D)
+```
+
+### CLI
+
+```bash
+# Embed a catalog and apply the shipped fit (downloads ~8 GB of model weights
+# on first run; embeddings are cached under ~/.cache/bazaar/embeds).
+bazaar run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out unified.npy
+
+# Fit on your own data.
+bazaar fit UniverseTBD/mmu_hsc_pdr3_dud_22.5 --D 256 --out fits/hsc-d256
+
+# Inspect a saved fit.
+bazaar load fits/hsc-d256
+
+# Apply a saved fit to new data.
+bazaar run UniverseTBD/some_other_dataset --fit fits/hsc-d256 --out new_unified.npy
+```
+
+Both `run` and `fit` accept:
+
+| flag | default | description |
+|------|---------|-------------|
+| `--split` | `train` | dataset split to stream |
+| `--max-samples N` | all | cap on galaxies ingested |
+| `--modality {hsc,jwst,legacysurvey}` | inferred | override band-set detection |
+| `--cache-dir PATH` | `~/.cache/bazaar/embeds` | per-model `.npy` cache |
+| `--batch-size N` | 64 | inference batch size |
+
+## Evaluation harness
+
+The benchmark that produced the published results lives behind `bazaar bench`
+(kept for reproducibility; requires pre-cached `.npy` embeddings):
+
+```bash
+bazaar bench --D 256 --out data/results_pca256.parquet \
+             --emb-dir data/embeddings
+bazaar plot  --data data/results_pca256.parquet --suffix _pca256
+```
+
+This writes a 1 500-row long-form parquet (modality × property × seed ×
+{naive, procrustes, mcca, 22×single}) plus per-modality strip plots, a
+2×3 summary grid, and a stats table under `figs/`.
 
 ## What this is *not*
 
