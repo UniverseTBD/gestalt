@@ -24,8 +24,8 @@ stalls first.
 
 ## What's in the basket
 
-22 checkpoints across 8 families, all pre-published as per-row embeddings
-on `huggingface.co/datasets/UniverseTBD/pu-embeddings/tree/main/cosmosweb`:
+22 checkpoints across 8 families, all bundled model adapters (no separate
+`pu` installation needed):
 
 | family       | sizes                       | count |
 |--------------|-----------------------------|-------|
@@ -40,9 +40,9 @@ on `huggingface.co/datasets/UniverseTBD/pu-embeddings/tree/main/cosmosweb`:
 
 ## Method, in one paragraph
 
-For each foundation model, take its frozen 45 000-row embedding, reduce
-to D dimensions via randomised-SVD PCA, and z-score each feature. Now
-form three candidate "basket" representations:
+For each foundation model, take its frozen embedding, reduce to D dimensions
+via randomised-SVD PCA, and z-score each feature. Now form three candidate
+"basket" representations:
 
 1. **Naive mean** — straight elementwise mean across the 22 z-scored PCAs.
 2. **Procrustes / GPA-aligned mean** — iteratively rotate each model onto
@@ -74,65 +74,79 @@ cd the-bazaar
 uv sync          # or: pip install -e .
 ```
 
-No upstream-repo dependency — the code here is self-contained (the
-embeddings themselves are pulled from
-`huggingface.co/datasets/UniverseTBD/pu-embeddings` on first run).
-
 ## Use the bazaar on your own data
 
-The headline workflow is one command: a saved MCCA fit projects the
-basket-mean shared latent onto whatever you point at.
+The top-level API is three verbs. Pass any HF dataset id (or local path)
+that `datasets.load_dataset` can open — bazaar streams images directly,
+infers the modality from the band list, and handles all embedding and
+alignment internally.
 
-```bash
-# COSMOS-Web embeddings already on HF — apply the shipped fit.
-bazaar transform \
-  --fit default \
-  --emb-dir data/embeddings --modality jwst \
-  --out unified.npy
+### Python
+
+```python
+from bazaar import run, fit, load
+
+# Apply the shipped COSMOS-Web fit to any compatible catalog.
+embs = run("UniverseTBD/mmu_hsc_pdr3_dud_22.5")          # → (N, 1024) ndarray
+
+# Fit a fresh BazaarFit on your own corpus.
+fit_obj = fit("UniverseTBD/mmu_hsc_pdr3_dud_22.5", D=1024, out="fits/mine")
+
+# Reload a saved fit. The fit object is callable — fit_obj(input) is
+# shorthand for run(input, fit=fit_obj).
+fit_obj = load("fits/mine")
+embs = fit_obj("UniverseTBD/some_other_dataset")
 ```
 
-Or, if you have raw images that pu's cosmosweb adapter understands and
-want the bazaar to embed them for you first:
-
-```bash
-bazaar transform \
-  --fit default \
-  --pu-path /path/to/pu --modality jwst \
-  --out unified.npy
-```
-
-Roll-your-own fit on a custom corpus:
-
-```bash
-bazaar fit \
-  --emb-dir data/embeddings --modality jwst --D 256 \
-  --out fits/jwst-d256
-bazaar transform \
-  --fit fits/jwst-d256 \
-  --emb-dir data/embeddings --modality jwst \
-  --out unified.npy
-```
-
-Python API:
+Lower-level access (if you already have per-model embeddings as ndarrays):
 
 ```python
 from bazaar import BASKET, BazaarFit
-fit = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=256)
-fit.save("fits/my-fit")
+
+fit_obj = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=256)
+fit_obj.save("fits/my-fit")
+
 # Later, anywhere:
-fit = BazaarFit.load("fits/my-fit")
-unified = fit.transform(new_per_model_embeddings)   # (N, D)
+fit_obj = BazaarFit.load("fits/my-fit")
+unified = fit_obj.transform(new_per_model_embeddings)   # (N, D)
 ```
+
+### CLI
+
+```bash
+# Embed a catalog and apply the shipped fit (downloads ~8 GB of model weights
+# on first run; embeddings are cached under ~/.cache/bazaar/embeds).
+bazaar run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out unified.npy
+
+# Fit on your own data.
+bazaar fit UniverseTBD/mmu_hsc_pdr3_dud_22.5 --D 256 --out fits/hsc-d256
+
+# Inspect a saved fit.
+bazaar load fits/hsc-d256
+
+# Apply a saved fit to new data.
+bazaar run UniverseTBD/some_other_dataset --fit fits/hsc-d256 --out new_unified.npy
+```
+
+Both `run` and `fit` accept:
+
+| flag | default | description |
+|------|---------|-------------|
+| `--split` | `train` | dataset split to stream |
+| `--max-samples N` | all | cap on galaxies ingested |
+| `--modality {hsc,jwst,legacysurvey}` | inferred | override band-set detection |
+| `--cache-dir PATH` | `~/.cache/bazaar/embeds` | per-model `.npy` cache |
+| `--batch-size N` | 64 | inference batch size |
 
 ## Evaluation harness
 
-The benchmark that produced the published results lives behind
-`bazaar run`:
+The benchmark that produced the published results lives behind `bazaar bench`
+(kept for reproducibility; requires pre-cached `.npy` embeddings):
 
 ```bash
-# Embeddings auto-download into data/embeddings/ on first run (~8 GB).
-bazaar run --D 256 --out data/results_pca256.parquet
-bazaar plot --data data/results_pca256.parquet --suffix _pca256
+bazaar bench --D 256 --out data/results_pca256.parquet \
+             --emb-dir data/embeddings
+bazaar plot  --data data/results_pca256.parquet --suffix _pca256
 ```
 
 This writes a 1 500-row long-form parquet (modality × property × seed ×
