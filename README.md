@@ -2,7 +2,7 @@
 
 > *"Given enough eyeballs, all bugs are shallow."* — Linus's Law
 >
-> *"Given enough aligned foundation models, all physics is linear."* — us, probably
+> *"Given enough aligned foundation models, all astronomy is linear."* — us, probably
 
 A small library + CLI that tests whether the **average embedding** from a
 heterogeneous basket of frozen foundation models outperforms any single
@@ -12,7 +12,7 @@ log M★, sSFR), but the alignment and probe code is task-agnostic.
 
 The Bazaar is a stall-by-stall view of representation learning: each
 foundation model brings its own goods (its own coordinate system on the
-same 45 000 galaxies), and we ask whether the *aggregate* of the bazaar
+same galaxies), and we ask whether the *aggregate* of the bazaar
 beats the best single vendor. Spoiler: yes, but only if you align the
 stalls first.
 
