@@ -6,10 +6,10 @@ build/
 dist/
 *.egg-info/
 
-# experiment artefacts
-data/
-figs/
-analysis/
+# experiment artefacts (top-level only — don't shadow package data dirs)
+/data/
+/figs/
+/analysis/
 *.parquet
 *.npy
 
