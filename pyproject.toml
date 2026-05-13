@@ -1,0 +1,40 @@
+[project]
+name = "the-bazaar"
+version = "0.1.0"
+description = "Aligned-basket evaluation of foundation models on astronomical linear-probe tasks."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Mike Smith", email = "mikejamesjsmith@gmail.com" }]
+dependencies = [
+    "platonic-universe @ git+https://github.com/UniverseTBD/platonic-universe.git@6672072c5ca76b43df1ec7bd8c75d6596771c9f4",
+    "numpy>=1.26",
+    "polars>=0.20",
+    "scikit-learn>=1.3",
+    "scipy>=1.11",
+    "datasets>=2.14",
+    "tqdm>=4.65",
+    "matplotlib>=3.7",
+    "huggingface_hub>=0.20",
+    "pyarrow>=14.0",
+]
+
+[project.scripts]
+bazaar = "bazaar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bazaar"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

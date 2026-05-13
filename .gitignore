@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+.uv/
+build/
+dist/
+*.egg-info/
+
+# experiment artefacts
+data/
+figs/
+analysis/
+*.parquet
+*.npy
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
