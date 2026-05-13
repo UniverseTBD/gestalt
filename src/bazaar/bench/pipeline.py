@@ -5,10 +5,13 @@ For each modality (telescope):
   1. Load cached per-model embeddings (`bazaar.basket.ensure_embeddings_downloaded`).
   2. PCA each model to D components, then z-score each feature
      (`bazaar.whiten.pca_zscore_*`).
-  3. Compute three basket sources:
+  3. Compute four basket sources:
      - naive mean (no alignment)
      - Procrustes / GPA-aligned mean
      - MCCA shared latent
+     - concat→PCA-to-D ablation (no per-model whitening; tests whether
+       the per-model standardisation step is doing real work versus a
+       single global SVD on the raw 22-model concatenation)
   4. Run the linear probe on each basket source and each single-model
      PCA feature for `n_seeds` random train/test splits.
 
@@ -18,8 +21,11 @@ installable surface no longer touches GPA, naive-mean, or the probe.
 """
 from __future__ import annotations
 
+import gc
+
 import numpy as np
 from datasets import load_dataset
+from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 from bazaar.align import generalized_procrustes
@@ -120,6 +126,24 @@ def run_modality(
     basket_sources.append(("basket_mcca_mean", B_mcca))
     print(f"[bazaar] {telescope}: MCCA shared latent shape={B_mcca.shape}")
 
+    # Ablation: concat raw per-model embeddings (no whitening, no alignment),
+    # take the top-D principal components of the full concatenation, and probe.
+    # If this matches or beats MCCA, the per-model standardisation step isn't
+    # earning its keep — the basket-vs-single win is a parameter-count win.
+    raw_widths = [embeddings[name].shape[1] for name in model_names]
+    print(f"[bazaar] {telescope}: concat→PCA-to-{D} ablation on "
+          f"{sum(raw_widths)}-d raw concatenation (widths={raw_widths})...")
+    C_raw = np.concatenate(
+        [embeddings[name] for name in model_names], axis=1,
+    ).astype(np.float32)
+    B_concat_pca = PCA(
+        n_components=D, svd_solver="randomized", random_state=0,
+    ).fit_transform(C_raw).astype(np.float32)
+    del C_raw
+    gc.collect()
+    basket_sources.append(("basket_concat_pca", B_concat_pca))
+    print(f"[bazaar] {telescope}: concat→PCA shape={B_concat_pca.shape}")
+
     for prop in PROPERTIES:
         y = params[prop]
         for seed in range(n_seeds):
@@ -141,17 +165,19 @@ def run_modality(
                     if r["modality"] == telescope and r["property"] == prop
                     and r["source"] == src]
         bm = _pick("basket_mcca_mean")
+        bc = _pick("basket_concat_pca")
         s_arr = [r["r2"] for r in rows
                  if r["modality"] == telescope and r["property"] == prop
                  and r["source"].startswith("single_")]
-        summary = f"  {prop:8s}  mcca={np.mean(bm):.4f}±{np.std(bm):.4f}"
+        parts = [f"  {prop:8s}"]
         if whiten_mode == "pca_zscore":
             bn = _pick("basket_mean")
             bp = _pick("basket_procrustes_mean")
-            summary = (
-                f"  {prop:8s}  naive={np.mean(bn):.4f}±{np.std(bn):.4f}  "
-                f"procrustes={np.mean(bp):.4f}±{np.std(bp):.4f}  "
-                f"mcca={np.mean(bm):.4f}±{np.std(bm):.4f}"
-            )
-        print(f"{summary}  best-single={max(s_arr):.4f}  median-single={np.median(s_arr):.4f}")
+            parts.append(f"naive={np.mean(bn):.4f}±{np.std(bn):.4f}")
+            parts.append(f"procrustes={np.mean(bp):.4f}±{np.std(bp):.4f}")
+        parts.append(f"mcca={np.mean(bm):.4f}±{np.std(bm):.4f}")
+        parts.append(f"concat_pca={np.mean(bc):.4f}±{np.std(bc):.4f}")
+        parts.append(f"best-single={max(s_arr):.4f}")
+        parts.append(f"median-single={np.median(s_arr):.4f}")
+        print("  ".join(parts))
     return rows
