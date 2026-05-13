@@ -1,4 +1,8 @@
-# The Bazaar
+<p align="center">
+  <img src="https://github.com/Smith42/the-bazaar/blob/master/docs/spidey.jpg?raw=true" width="42%">
+</p>
+
+# 🛒 The Bazaar 🛒
 
 > *"Given enough eyeballs, all bugs are shallow."* — Linus's Law
 >
