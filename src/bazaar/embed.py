@@ -1,16 +1,18 @@
 """Images → per-model embeddings, via a `pu run` subprocess per family.
 
 This is the only place in bazaar that touches parquet. We invoke
-`uv run --directory <pu_path> pu run --model <family> --mode jwst` once
-per family. pu writes per-(size) parquets to `<pu_path>/data/` with columns
-named `<family>_<size_lstripped>_<modality>` (per `pu/src/pu/experiments.py:289-300`).
-We translate those columns into the existing `.npy` cache layout that
-`bazaar.basket.emb_npy_path` already understands, so downstream code reads
-them with no special-casing.
+`uv run --directory <pu_path> pu run --model <family> --mode <comp_mode>`
+once per family, where `comp_mode` is derived from the requested modality
+via `COMP_MODE_FOR_MODALITY`. pu writes per-(size) parquets to
+`<pu_path>/data/` with columns named `<family>_<size_lstripped>_<modality>`
+(per `pu/src/pu/experiments.py:289-300`). We translate those columns into
+the existing `.npy` cache layout that `bazaar.basket.emb_npy_path` already
+understands, so downstream code reads them with no special-casing.
 
-For v1 the input dataset is hard-wired to pu's cosmosweb adapter
-(`Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2`); generic image-dir support is
-follow-on work and needs a corresponding pu dataset adapter.
+Supported modalities are pu's image-domain modes that produce a foundation-
+model embedding per row: `hsc` and `jwst` (both from pu's cosmosweb jwst
+crossmatch) and `legacysurvey` (from `Smith42/legacysurvey_hsc_crossmatched`).
+Arbitrary image directories still require a new pu dataset adapter.
 """
 from __future__ import annotations
 
@@ -23,7 +25,16 @@ import polars as pl
 
 from bazaar.basket import BASKET, emb_npy_path
 
-PU_COMP_MODE = "jwst"
+# Map each user-facing modality to the pu `--mode` value that produces it.
+# pu's `--mode <X>` reads `Smith42/<X>_hsc_crossmatched` and emits parquets
+# with both `hsc_*` and `<X>_*` columns, so requesting modality=hsc reuses
+# the jwst-paired pu run (preserving prior behavior); legacysurvey gets its
+# own pu invocation against its own crossmatch.
+COMP_MODE_FOR_MODALITY: dict[str, str] = {
+    "hsc": "jwst",
+    "jwst": "jwst",
+    "legacysurvey": "legacysurvey",
+}
 
 
 def _column_for(family: str, size: str, modality: str) -> str:
@@ -55,8 +66,11 @@ def embed_via_pu(
     Re-running is idempotent: per-family pu invocations are skipped if all
     sizes for that family are already cached as .npy.
     """
-    if modality not in {"hsc", "jwst"}:
-        raise ValueError(f"modality must be 'hsc' or 'jwst', got {modality!r}")
+    if modality not in COMP_MODE_FOR_MODALITY:
+        raise ValueError(
+            f"modality must be one of {sorted(COMP_MODE_FOR_MODALITY)}, got {modality!r}"
+        )
+    comp_mode = COMP_MODE_FOR_MODALITY[modality]
     cache_dir.mkdir(parents=True, exist_ok=True)
     pu_data_dir = pu_path / "data"
     pu_data_dir.mkdir(parents=True, exist_ok=True)
@@ -70,7 +84,7 @@ def embed_via_pu(
             "uv", "run", "--directory", str(pu_path),
             "pu", "run",
             "--model", family,
-            "--mode", PU_COMP_MODE,
+            "--mode", comp_mode,
         ]
         if test:
             cmd.append("--test")
@@ -80,7 +94,7 @@ def embed_via_pu(
         for fam, size in basket:
             if fam != family:
                 continue
-            _harvest_parquet(family, size, modality, pu_data_dir, cache_dir)
+            _harvest_parquet(family, size, modality, comp_mode, pu_data_dir, cache_dir)
 
     return {
         f"{f}_{s}": emb_npy_path(cache_dir, modality, f, s) for f, s in basket
@@ -88,14 +102,14 @@ def embed_via_pu(
 
 
 def _harvest_parquet(
-    family: str, size: str, modality: str,
+    family: str, size: str, modality: str, comp_mode: str,
     pu_data_dir: Path, cache_dir: Path,
 ) -> None:
-    parquet = pu_data_dir / f"{PU_COMP_MODE}_{family}_{size}.parquet"
+    parquet = pu_data_dir / f"{comp_mode}_{family}_{size}.parquet"
     if not parquet.exists():
         raise FileNotFoundError(
             f"expected pu output {parquet} after `pu run --model {family} "
-            f"--mode {PU_COMP_MODE}`; got nothing"
+            f"--mode {comp_mode}`; got nothing"
         )
     df = pl.read_parquet(parquet)
     col = _column_for(family, size, modality)
@@ -110,11 +124,14 @@ def _harvest_parquet(
     print(f"[bazaar.embed] {family}_{size} {modality}: harvested {arr.shape} → {out.name}")
 
 
-def cleanup_pu_data(pu_path: Path, basket: list[tuple[str, str]] = BASKET) -> None:
+def cleanup_pu_data(
+    pu_path: Path, modality: str, basket: list[tuple[str, str]] = BASKET,
+) -> None:
     """Optionally remove pu's per-run parquet outputs after harvest."""
+    comp_mode = COMP_MODE_FOR_MODALITY[modality]
     pu_data_dir = pu_path / "data"
     for fam, size in basket:
-        p = pu_data_dir / f"{PU_COMP_MODE}_{fam}_{size}.parquet"
+        p = pu_data_dir / f"{comp_mode}_{fam}_{size}.parquet"
         if p.exists():
             p.unlink()
     sample_dir = pu_data_dir / "sample_galaxies"

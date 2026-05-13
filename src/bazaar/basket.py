@@ -31,9 +31,20 @@ DATASET = "Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2"
 DS_TAG = DATASET.split("/")[-1]
 DOWNLOAD_N_USE = 45_000
 
+# Per-modality dataset tag used in the cache filename. `hsc` and `jwst` share
+# the cosmosweb crossmatch (pu produces both views from a single `--mode jwst`
+# run); `legacysurvey` lives in pu's `Smith42/legacysurvey_hsc_crossmatched`
+# dataset. Unknown modalities fall back to DS_TAG so prior callers still work.
+_DS_TAG_BY_MODALITY: dict[str, str] = {
+    "hsc": DS_TAG,
+    "jwst": DS_TAG,
+    "legacysurvey": "legacysurvey_hsc_crossmatched",
+}
+
 
 def emb_npy_path(emb_dir: Path, telescope: str, family: str, size: str) -> Path:
-    fname = f"{telescope}_embeddings_{DS_TAG}_{family}_{size}_{DOWNLOAD_N_USE}.npy"
+    ds_tag = _DS_TAG_BY_MODALITY.get(telescope, DS_TAG)
+    fname = f"{telescope}_embeddings_{ds_tag}_{family}_{size}_{DOWNLOAD_N_USE}.npy"
     return emb_dir / fname
 
 

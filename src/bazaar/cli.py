@@ -63,6 +63,9 @@ def _add_run_args(p: argparse.ArgumentParser) -> None:
                    default=Path(__file__).resolve().parents[2]
                    / "scripts" / "stream_embeddings_to_npy.py",
                    help="Path to the embedding downloader script")
+    p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
+                   help="Per-model whitener before MCCA. 'zscore' is a PCA "
+                        "ablation; naive-mean and GPA are skipped in that mode.")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -80,9 +83,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             D=args.D, n_seeds=args.n_seeds,
             n_use=args.n_use, test_size=args.test_size,
             emb_dir=args.emb_dir,
+            whiten_mode=args.whiten,
         ))
 
-    df = pl.DataFrame(all_rows).with_columns(pl.lit(args.D).alias("D"))
+    df = (
+        pl.DataFrame(all_rows)
+        .with_columns(pl.lit(args.D).alias("D"))
+        .with_columns(pl.lit(args.whiten).alias("whiten_mode"))
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(args.out)
     print(f"\n[bazaar] Wrote {len(df)} rows → {args.out}")
@@ -98,12 +106,17 @@ def cmd_fit(args: argparse.Namespace) -> int:
     """Fit a BazaarFit from per-model embeddings and save it."""
     emb_dir = _resolve_emb_dir(args)
     embeddings = load_embeddings(BASKET, args.modality, emb_dir, n_use=args.n_use)
-    print(f"[bazaar] Fitting BazaarFit (D={args.D}, seed={args.seed}) on "
-          f"{len(BASKET)} models × {args.n_use} rows ({args.modality})...")
-    fit = BazaarFit.fit(embeddings, basket=BASKET, D=args.D, seed=args.seed)
+    print(f"[bazaar] Fitting BazaarFit (D={args.D}, seed={args.seed}, "
+          f"whiten={args.whiten}) on {len(BASKET)} models × {args.n_use} rows "
+          f"({args.modality})...")
+    fit = BazaarFit.fit(
+        embeddings, basket=BASKET, D=args.D, seed=args.seed,
+        whiten_mode=args.whiten,
+    )
     args.out.mkdir(parents=True, exist_ok=True)
     fit.save(args.out)
-    print(f"[bazaar] Wrote fit → {args.out}/  ({len(fit.basket)} models, V {fit.mcca_V.shape})")
+    print(f"[bazaar] Wrote fit → {args.out}/  ({len(fit.basket)} models, "
+          f"V {fit.mcca_V.shape}, whiten={fit.whiten_mode})")
     return 0
 
 
@@ -169,10 +182,14 @@ def main(argv: list[str] | None = None) -> int:
 
     fit_p = sub.add_parser("fit", help="Fit a BazaarFit and save it to a directory")
     _add_source_args(fit_p)
-    fit_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    fit_p.add_argument("--modality", choices=["hsc", "jwst", "legacysurvey"], required=True)
     fit_p.add_argument("--D", type=int, default=256)
     fit_p.add_argument("--seed", type=int, default=0)
     fit_p.add_argument("--n-use", type=int, default=45_000)
+    fit_p.add_argument("--whiten", choices=["pca_zscore", "zscore"],
+                       default="pca_zscore",
+                       help="Per-model whitener. 'zscore' ablates PCA "
+                            "(keeps native d_m per model, MCCA only).")
     fit_p.add_argument("--out", type=Path, required=True,
                        help="Output directory for the saved fit")
     fit_p.set_defaults(func=cmd_fit)
@@ -183,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     tr_p.add_argument("--fit", type=Path, required=True,
                       help="Path to a saved BazaarFit directory, or the literal "
                            "'default' to download the shipped COSMOS-Web D=256 fit")
-    tr_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    tr_p.add_argument("--modality", choices=["hsc", "jwst", "legacysurvey"], required=True)
     tr_p.add_argument("--n-use", type=int, default=45_000)
     tr_p.add_argument("--out", type=Path, required=True,
                       help="Output .npy path for the unified (N, D) embedding")
@@ -191,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
 
     emb_p = sub.add_parser("embed",
                            help="Pre-warm per-model embedding cache via pu run")
-    emb_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    emb_p.add_argument("--modality", choices=["hsc", "jwst", "legacysurvey"], required=True)
     emb_p.add_argument("--pu-path", type=Path, default=None)
     emb_p.add_argument("--cache-dir", type=Path, default=None)
     emb_p.add_argument("--test", action="store_true")

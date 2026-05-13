@@ -108,3 +108,55 @@ def test_mismatched_basket_raises(tmp_path):
     bad = {k: v for k, v in embeddings.items() if k != f"{basket[0][0]}_{basket[0][1]}"}
     with pytest.raises(KeyError):
         fit.transform(bad)
+
+
+def test_zscore_mode_round_trip(tmp_path):
+    """Whiten-mode='zscore' fits, transforms, saves, and loads end-to-end.
+
+    Differs from the default in that per-model widths stay at native d_m,
+    so V's row dim is M*d (not M*D), and the npz files only carry zscore
+    stats. Held-out transform must still produce well-conditioned columns.
+    """
+    embeddings, basket = _synthetic_basket(n=5000, d=64, D=16)
+    train = {k: v[:4000] for k, v in embeddings.items()}
+    test = {k: v[4000:] for k, v in embeddings.items()}
+
+    fit = BazaarFit.fit(train, basket=basket, D=16, seed=0, whiten_mode="zscore")
+    assert fit.whiten_mode == "zscore"
+    # Row dim of V is sum of per-model native widths (here: M * d).
+    assert fit.mcca_V.shape == (len(basket) * 64, 16)
+    # Per-model artifacts have only zscore stats — no PCA fields.
+    for art in fit.pca.values():
+        assert set(art.keys()) == {"zscore_mu", "zscore_sd"}
+
+    S_test = fit.transform(test)
+    assert S_test.shape == (1000, 16)
+    assert np.all(np.isfinite(S_test))
+    assert (S_test.std(axis=0) > 1e-2).all()
+
+    fit.save(tmp_path / "fit_zs")
+    reloaded = BazaarFit.load(tmp_path / "fit_zs")
+    assert reloaded.whiten_mode == "zscore"
+    np.testing.assert_array_equal(reloaded.mcca_V, fit.mcca_V)
+    np.testing.assert_allclose(
+        reloaded.transform(test), fit.transform(test), atol=0,
+    )
+
+
+def test_legacy_fit_without_whiten_mode_loads_as_pca_zscore(tmp_path):
+    """Fits saved before the whiten_mode field existed still load."""
+    import json
+
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit.save(tmp_path / "legacy")
+    meta_path = tmp_path / "legacy" / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta.pop("whiten_mode")  # simulate a pre-feature fit on disk
+    meta_path.write_text(json.dumps(meta))
+
+    reloaded = BazaarFit.load(tmp_path / "legacy")
+    assert reloaded.whiten_mode == "pca_zscore"
+    np.testing.assert_allclose(
+        reloaded.transform(embeddings), fit.transform(embeddings), atol=0,
+    )
