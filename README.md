@@ -8,11 +8,13 @@
 >
 > *"Given enough aligned foundation models, all astronomy is linear."* — us, probably
 
-A small library + CLI that tests whether the **average embedding** from a
-heterogeneous basket of frozen foundation models outperforms any single
-model on a downstream linear-probe task. Currently configured for
-COSMOS-Web HSC × JWST imagery and three physical properties (redshift,
-log M★, sSFR), but the alignment and probe code is task-agnostic.
+A small library + CLI that aligns a heterogeneous basket of frozen
+foundation models into one shared embedding via MCCA, ships the fit so you
+can apply it to new data with one command, and (separately) tests whether
+that basket-mean beats any single model on a downstream linear-probe task.
+Currently wired up for COSMOS-Web HSC × JWST imagery and three physical
+properties (redshift, log M★, sSFR), but the alignment and probe code is
+task-agnostic.
 
 The Bazaar is a stall-by-stall view of representation learning: each
 foundation model brings its own goods (its own coordinate system on the
@@ -76,7 +78,56 @@ No upstream-repo dependency — the code here is self-contained (the
 embeddings themselves are pulled from
 `huggingface.co/datasets/UniverseTBD/pu-embeddings` on first run).
 
-## Run
+## Use the bazaar on your own data
+
+The headline workflow is one command: a saved MCCA fit projects the
+basket-mean shared latent onto whatever you point at.
+
+```bash
+# COSMOS-Web embeddings already on HF — apply the shipped fit.
+bazaar transform \
+  --fit default \
+  --emb-dir data/embeddings --modality jwst \
+  --out unified.npy
+```
+
+Or, if you have raw images that pu's cosmosweb adapter understands and
+want the bazaar to embed them for you first:
+
+```bash
+bazaar transform \
+  --fit default \
+  --pu-path /path/to/pu --modality jwst \
+  --out unified.npy
+```
+
+Roll-your-own fit on a custom corpus:
+
+```bash
+bazaar fit \
+  --emb-dir data/embeddings --modality jwst --D 256 \
+  --out fits/jwst-d256
+bazaar transform \
+  --fit fits/jwst-d256 \
+  --emb-dir data/embeddings --modality jwst \
+  --out unified.npy
+```
+
+Python API:
+
+```python
+from bazaar import BASKET, BazaarFit
+fit = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=256)
+fit.save("fits/my-fit")
+# Later, anywhere:
+fit = BazaarFit.load("fits/my-fit")
+unified = fit.transform(new_per_model_embeddings)   # (N, D)
+```
+
+## Evaluation harness
+
+The benchmark that produced the published results lives behind
+`bazaar run`:
 
 ```bash
 # Embeddings auto-download into data/embeddings/ on first run (~8 GB).
@@ -84,9 +135,9 @@ bazaar run --D 256 --out data/results_pca256.parquet
 bazaar plot --data data/results_pca256.parquet --suffix _pca256
 ```
 
-This will write a 1 500-row long-form parquet (modality × property ×
-seed × {naive, procrustes, mcca, 22×single}) plus per-modality strip
-plots, a 2×3 summary grid, and a stats table under `figs/`.
+This writes a 1 500-row long-form parquet (modality × property × seed ×
+{naive, procrustes, mcca, 22×single}) plus per-modality strip plots, a
+2×3 summary grid, and a stats table under `figs/`.
 
 ## What this is *not*
 

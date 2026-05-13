@@ -61,6 +61,31 @@ sklearn's `randomized_svd(C, n_components=D)` and scale the left
 singulars by their singular values: `S = U Σ`. This is unsupervised:
 it sees only the per-model PCAs, never the labels.
 
+## Persistence and the V matrix
+
+`randomized_svd(C, n_components=D)` returns `(U, σ, Vᵀ)`. The fit-time
+shared latent is `S = U Σ`, and equivalently `S = C V` where
+`V = (Vᵀ)ᵀ ∈ R^{MD × D}`. So **V alone is enough to project new data
+into the same coordinate system**: build `C_new` from new per-model
+whitened features and compute `S_new = C_new V`.
+
+`bazaar.fit.BazaarFit` persists everything needed to redo the
+preprocessing on new rows:
+
+```
+<fit_dir>/
+├── meta.json                       schema, D, seed, basket order
+├── pca/<family>_<size>.npz         components_, mean_, zscore_μ, zscore_σ
+└── mcca.npz                        V (M·D × D)
+```
+
+`BazaarFit.transform(new_embeddings)` runs each model's saved PCA + z-score
+on the new rows (`(E − μ) @ componentsᵀ`, then `(z − μ_z) / σ_z`),
+concatenates the result into `C_new`, and returns `C_new @ V`. On the fit
+data itself this differs from `S_fit = U Σ` only by randomized-SVD
+reprojection error (~1e-4 absolute on float32). The column space is
+preserved exactly.
+
 ## <a name="vs-ensemble"></a>How is this different from an ensemble?
 
 Classical ensembles (bagging, stacking, boosting) train base learners
