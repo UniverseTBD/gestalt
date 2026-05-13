@@ -1,10 +1,10 @@
-"""End-to-end pipeline: PCA → align → average → probe.
+"""End-to-end benchmark sweep: PCA → align → average → probe.
 
 For each modality (telescope):
 
   1. Load cached per-model embeddings (`bazaar.basket.ensure_embeddings_downloaded`).
   2. PCA each model to D components, then z-score each feature
-     (`pca_and_zscore`).
+     (`bazaar.whiten.pca_zscore_*`).
   3. Compute three basket sources:
      - naive mean (no alignment)
      - Procrustes / GPA-aligned mean
@@ -12,18 +12,20 @@ For each modality (telescope):
   4. Run the linear probe on each basket source and each single-model
      PCA feature for `n_seeds` random train/test splits.
 
-Output is long-form: one row per (modality, property, seed, source).
+Output is long-form: one row per (modality, property, seed, source). This
+is the benchmark harness that produced the published `bazaar` numbers; the
+installable surface no longer touches GPA, naive-mean, or the probe.
 """
 from __future__ import annotations
 
 import numpy as np
 from datasets import load_dataset
-from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 from bazaar.align import generalized_procrustes
 from bazaar.basket import DATASET, load_embeddings
-from bazaar.probe import run_probe
+from bazaar.bench.probe import run_probe
+from bazaar.whiten import pca_zscore_transform, zscore_transform
 
 WHITEN_MODES = ("pca_zscore", "zscore")
 
@@ -37,73 +39,6 @@ CATALOG_COLUMNS = {
 }
 
 PROPERTIES = ["redshift", "mass", "sSFR"]
-
-
-def pca_zscore_fit(
-    E: np.ndarray, D: int, seed: int = 0,
-) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Fit per-model PCA + per-feature z-score on E.
-
-    Returns
-    -------
-    Z         : (N, D_eff) float32 — whitened features on the fit data.
-    artifacts : dict with keys
-                  - pca_components : (D_eff, d_in)
-                  - pca_mean       : (d_in,)
-                  - zscore_mu      : (1, D_eff)
-                  - zscore_sd      : (1, D_eff)
-                Sufficient to reproduce Z via `pca_zscore_transform`.
-    """
-    D_eff = min(D, E.shape[1], E.shape[0])
-    pca = PCA(n_components=D_eff, svd_solver="randomized", random_state=seed)
-    Z = pca.fit_transform(E)
-    mu = Z.mean(axis=0, keepdims=True)
-    sd = Z.std(axis=0, keepdims=True) + 1e-8
-    artifacts = {
-        "pca_components": pca.components_.astype(np.float32),
-        "pca_mean":       pca.mean_.astype(np.float32),
-        "zscore_mu":      mu.astype(np.float32),
-        "zscore_sd":      sd.astype(np.float32),
-    }
-    return ((Z - mu) / sd).astype(np.float32), artifacts
-
-
-def pca_zscore_transform(E: np.ndarray, artifacts: dict[str, np.ndarray]) -> np.ndarray:
-    """Apply saved PCA + z-score artifacts to (possibly new) embeddings."""
-    E64 = E.astype(np.float32, copy=False)
-    Z = (E64 - artifacts["pca_mean"]) @ artifacts["pca_components"].T
-    return ((Z - artifacts["zscore_mu"]) / artifacts["zscore_sd"]).astype(np.float32)
-
-
-def pca_and_zscore(E: np.ndarray, D: int, seed: int = 0) -> np.ndarray:
-    """Back-compat: PCA on full E (randomized SVD), then per-feature z-score."""
-    Z, _ = pca_zscore_fit(E, D=D, seed=seed)
-    return Z
-
-
-def zscore_fit(E: np.ndarray) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Fit per-feature z-score on raw embeddings (no PCA, no dim reduction).
-
-    The PCA-free counterpart of `pca_zscore_fit`, used by the `"zscore"`
-    whiten mode in `BazaarFit` to ablate PCA out of the pipeline. The output
-    keeps `E`'s column count, so downstream MCCA receives heterogeneous-
-    width per-model views — fine for the SVD but breaks the naive mean
-    and GPA paths, which assume matching shapes.
-    """
-    E32 = E.astype(np.float32, copy=False)
-    mu = E32.mean(axis=0, keepdims=True)
-    sd = E32.std(axis=0, keepdims=True) + 1e-8
-    artifacts = {
-        "zscore_mu": mu.astype(np.float32),
-        "zscore_sd": sd.astype(np.float32),
-    }
-    return ((E32 - mu) / sd).astype(np.float32), artifacts
-
-
-def zscore_transform(E: np.ndarray, artifacts: dict[str, np.ndarray]) -> np.ndarray:
-    """Apply saved per-feature z-score stats to (possibly new) embeddings."""
-    E32 = E.astype(np.float32, copy=False)
-    return ((E32 - artifacts["zscore_mu"]) / artifacts["zscore_sd"]).astype(np.float32)
 
 
 def catalog_pass(n_use: int) -> dict[str, np.ndarray]:
@@ -132,7 +67,7 @@ def run_modality(
     emb_dir,
     whiten_mode: str = "pca_zscore",
 ) -> list[dict]:
-    from bazaar.fit import BazaarFit  # local import: fit.py imports from this module
+    from bazaar.fit import BazaarFit  # local import keeps the import dag clean
 
     if whiten_mode not in WHITEN_MODES:
         raise ValueError(f"whiten_mode must be one of {WHITEN_MODES}, got {whiten_mode!r}")
