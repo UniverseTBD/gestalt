@@ -10,6 +10,7 @@ import polars as pl
 
 from bazaar.basket import (
     BASKET,
+    ensure_default_fit_downloaded,
     ensure_embeddings_downloaded,
     load_embeddings,
 )
@@ -19,6 +20,7 @@ from bazaar.pipeline import catalog_pass, run_modality
 from bazaar.plotting import render_plots
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "bazaar" / "embeds"
+DEFAULT_FITS_DIR = Path.home() / ".cache" / "bazaar" / "fits"
 
 
 def _resolve_emb_dir(args: argparse.Namespace) -> Path:
@@ -107,7 +109,11 @@ def cmd_fit(args: argparse.Namespace) -> int:
 
 def cmd_transform(args: argparse.Namespace) -> int:
     """Apply a saved BazaarFit to per-model embeddings."""
-    fit = BazaarFit.load(args.fit)
+    if str(args.fit) == "default":
+        fit_dir = ensure_default_fit_downloaded(args.modality, DEFAULT_FITS_DIR)
+    else:
+        fit_dir = args.fit
+    fit = BazaarFit.load(fit_dir)
     emb_dir = _resolve_emb_dir(args)
     embeddings = load_embeddings(fit.basket, args.modality, emb_dir, n_use=args.n_use)
     print(f"[bazaar] Applying fit ({args.fit}) to {len(fit.basket)} models × "
@@ -175,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                           help="Apply a saved BazaarFit to per-model embeddings")
     _add_source_args(tr_p)
     tr_p.add_argument("--fit", type=Path, required=True,
-                      help="Path to a saved BazaarFit directory")
+                      help="Path to a saved BazaarFit directory, or the literal "
+                           "'default' to download the shipped COSMOS-Web D=256 fit")
     tr_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
     tr_p.add_argument("--n-use", type=int, default=45_000)
     tr_p.add_argument("--out", type=Path, required=True,
