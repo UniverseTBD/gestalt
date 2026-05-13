@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
+
 BASKET: list[tuple[str, str]] = [
     ("astropt", "015M"), ("astropt", "095M"), ("astropt", "850M"),
     ("ijepa",   "huge"), ("ijepa",   "giant"),
@@ -33,6 +35,24 @@ DOWNLOAD_N_USE = 45_000
 def emb_npy_path(emb_dir: Path, telescope: str, family: str, size: str) -> Path:
     fname = f"{telescope}_embeddings_{DS_TAG}_{family}_{size}_{DOWNLOAD_N_USE}.npy"
     return emb_dir / fname
+
+
+def load_embeddings(
+    basket: list[tuple[str, str]],
+    telescope: str,
+    emb_dir: Path,
+    n_use: int = DOWNLOAD_N_USE,
+) -> dict[str, np.ndarray]:
+    """Load per-model .npy files into a {family_size: (n_use, d_m)} dict."""
+    out: dict[str, np.ndarray] = {}
+    for fam, size in basket:
+        path = emb_npy_path(emb_dir, telescope, fam, size)
+        if not path.exists():
+            raise FileNotFoundError(f"missing embedding file: {path}")
+        E = np.load(path, mmap_mode="r")
+        out[f"{fam}_{size}"] = np.asarray(E[:n_use], dtype=np.float32)
+        del E
+    return out
 
 
 def ensure_embeddings_downloaded(

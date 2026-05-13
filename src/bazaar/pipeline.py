@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 from bazaar.align import generalized_procrustes
-from bazaar.basket import DATASET, emb_npy_path
+from bazaar.basket import DATASET, load_embeddings
 from bazaar.probe import run_probe
 
 # Physics parameter → dataset column for Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2.
@@ -110,12 +110,7 @@ def run_modality(
     print(f"\n[bazaar] === {telescope.upper()} ===")
     print(f"[bazaar] Loading {len(basket)} embeddings + PCA-{D}...")
 
-    embeddings: dict[str, np.ndarray] = {}
-    for fam, size in tqdm(basket, desc=f"  {telescope} load"):
-        E = np.load(emb_npy_path(emb_dir, telescope, fam, size), mmap_mode="r")
-        embeddings[f"{fam}_{size}"] = np.asarray(E[:n_use], dtype=np.float32)
-        del E
-
+    embeddings = load_embeddings(basket, telescope, emb_dir, n_use=n_use)
     fit = BazaarFit.fit(embeddings, basket=basket, D=D, seed=0)
     model_names = [f"{f}_{s}" for f, s in basket]
     Z_by_model = {

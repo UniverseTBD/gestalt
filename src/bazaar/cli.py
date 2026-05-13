@@ -1,4 +1,4 @@
-"""`bazaar run` and `bazaar plot` entrypoints."""
+"""`bazaar run`, `plot`, `fit`, and `transform` entrypoints."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,12 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from bazaar.basket import BASKET, ensure_embeddings_downloaded
+from bazaar.basket import (
+    BASKET,
+    ensure_embeddings_downloaded,
+    load_embeddings,
+)
+from bazaar.fit import BazaarFit
 from bazaar.pipeline import catalog_pass, run_modality
 from bazaar.plotting import render_plots
 
@@ -58,6 +63,31 @@ def cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fit(args: argparse.Namespace) -> int:
+    """Fit a BazaarFit from per-model embeddings already on disk and save it."""
+    embeddings = load_embeddings(BASKET, args.modality, args.emb_dir, n_use=args.n_use)
+    print(f"[bazaar] Fitting BazaarFit (D={args.D}, seed={args.seed}) on "
+          f"{len(BASKET)} models × {args.n_use} rows ({args.modality})...")
+    fit = BazaarFit.fit(embeddings, basket=BASKET, D=args.D, seed=args.seed)
+    args.out.mkdir(parents=True, exist_ok=True)
+    fit.save(args.out)
+    print(f"[bazaar] Wrote fit → {args.out}/  ({len(fit.basket)} models, V {fit.mcca_V.shape})")
+    return 0
+
+
+def cmd_transform(args: argparse.Namespace) -> int:
+    """Apply a saved BazaarFit to per-model embeddings on disk."""
+    fit = BazaarFit.load(args.fit)
+    embeddings = load_embeddings(fit.basket, args.modality, args.emb_dir, n_use=args.n_use)
+    print(f"[bazaar] Applying fit ({args.fit}) to {len(fit.basket)} models × "
+          f"{args.n_use} rows ({args.modality})...")
+    S = fit.transform(embeddings)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    np.save(args.out, S)
+    print(f"[bazaar] Wrote unified embedding {S.shape} → {args.out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="bazaar")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -71,6 +101,29 @@ def main(argv: list[str] | None = None) -> int:
     plot_p.add_argument("--suffix", type=str, default="")
     plot_p.add_argument("--figs-dir", type=Path, default=Path("figs"))
     plot_p.set_defaults(func=cmd_plot)
+
+    fit_p = sub.add_parser("fit", help="Fit a BazaarFit and save it to a directory")
+    fit_p.add_argument("--emb-dir", type=Path, required=True,
+                       help="Directory of per-model .npy embeddings")
+    fit_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    fit_p.add_argument("--D", type=int, default=256)
+    fit_p.add_argument("--seed", type=int, default=0)
+    fit_p.add_argument("--n-use", type=int, default=45_000)
+    fit_p.add_argument("--out", type=Path, required=True,
+                       help="Output directory for the saved fit")
+    fit_p.set_defaults(func=cmd_fit)
+
+    tr_p = sub.add_parser("transform",
+                          help="Apply a saved BazaarFit to per-model embeddings")
+    tr_p.add_argument("--fit", type=Path, required=True,
+                      help="Path to a saved BazaarFit directory")
+    tr_p.add_argument("--emb-dir", type=Path, required=True,
+                      help="Directory of per-model .npy embeddings")
+    tr_p.add_argument("--modality", choices=["hsc", "jwst"], required=True)
+    tr_p.add_argument("--n-use", type=int, default=45_000)
+    tr_p.add_argument("--out", type=Path, required=True,
+                      help="Output .npy path for the unified (N, D) embedding")
+    tr_p.set_defaults(func=cmd_transform)
 
     args = ap.parse_args(argv)
     return args.func(args)
