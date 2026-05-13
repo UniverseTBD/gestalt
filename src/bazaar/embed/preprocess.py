@@ -1,0 +1,273 @@
+"""Vendored from `pu.preprocess`.
+
+Converts raw galaxy flux blobs (the `{"flux": …, "band": …}` shape that both
+HF crossmatched datasets and MMU HATS rows expose) into the input tensors
+expected by the foundation-model adapters in `bazaar.embed.models`.
+
+Differences from upstream:
+- `PreprocessSAM2` removed (no SAM2 in the bazaar basket)
+- `_PERCENTILES_PATH` resolved via `importlib.resources` so the JSON ships
+  inside the wheel and can be loaded without a `data/` working-directory.
+"""
+import json
+import os
+from functools import partial
+from importlib.resources import files
+
+import numpy as np
+import torch
+from astropt.local_datasets import GalaxyImageDataset
+from torchvision import transforms
+
+from bazaar.embed.zoom import resize_galaxy_to_fit
+
+_percentiles_cache = None
+
+
+def _percentiles_path():
+    override = os.environ.get("PU_PERCENTILES_PATH") or os.environ.get(
+        "BAZAAR_PERCENTILES_PATH"
+    )
+    if override:
+        return override
+    return files("bazaar.embed").joinpath("data/percentiles.json")
+
+
+def _load_percentiles():
+    """Load percentiles from JSON, with caching."""
+    global _percentiles_cache
+    if _percentiles_cache is not None:
+        return _percentiles_cache
+
+    path = _percentiles_path()
+    with open(path) as f:
+        _percentiles_cache = json.load(f)
+    return _percentiles_cache
+
+
+class PreprocessHF:
+    """Preprocessor that converts galaxy images to the format expected by Dino and ViT models"""
+
+    # Processors that require images= as a keyword argument rather than positional
+    _IMAGES_KWARG_ALIASES = {
+        "clip",
+        "paligemma", "paligemma_3b", "paligemma_10b", "paligemma_28b",
+        "llava_15", "llava_15_7b", "llava_15_13b",
+        "llava_ov", "llava_ov_7b",
+    }
+
+    def __init__(self, modes, autoproc, resize=True, resize_mode="match", alias=None):
+        self.modes = modes
+        self.autoproc = autoproc
+        self.alias = alias
+        self.f2p = partial(
+            flux_to_pil, resize=resize, resize_mode=resize_mode
+        )
+
+    def __call__(self, idx):
+        result = {}
+        for mode in self.modes:
+            if (mode == "desi") or (mode == "sdss"):
+                continue
+            else:
+                im = self.f2p(idx[f"{mode}_image"], mode, self.modes)
+                if self.alias in ("llava_15", "llava_15_7b", "llava_15_13b",
+                                     "llava_ov", "llava_ov_7b"):
+                    proc_out = self.autoproc(
+                        images=im, text="<image>",
+                        return_tensors="pt", padding=True,
+                    )
+                elif self.alias in ("paligemma", "paligemma_3b",
+                                    "paligemma_10b", "paligemma_28b"):
+                    proc_out = self.autoproc(
+                        images=im, text="<image> ",
+                        return_tensors="pt", padding=True,
+                    )
+                elif self.alias in self._IMAGES_KWARG_ALIASES:
+                    proc_out = self.autoproc(images=im, return_tensors="pt")
+                else:
+                    proc_out = self.autoproc(im, return_tensors="pt")
+                if "pixel_values" in proc_out:
+                    result[f"{mode}"] = proc_out["pixel_values"].squeeze()
+                elif "pixel_values_videos" in proc_out:
+                    result[f"{mode}"] = proc_out["pixel_values_videos"].repeat(
+                        1, 16, 1, 1, 1
+                    ).squeeze()
+                else:
+                    raise KeyError(
+                        "autoproc does not have 'pixel_values' or "
+                        "'pixel_values_videos' in its dict"
+                    )
+        return result
+
+
+class PreprocessAstropt:
+    """Preprocessor that converts galaxy images to the format expected by AstroPT models"""
+
+    @staticmethod
+    def normalise_for_astropt(x):
+        std, mean = torch.std_mean(x, dim=1, keepdim=True)
+        return (x - mean) / (std + 1e-8)
+
+    @classmethod
+    def data_transforms(cls):
+        return transforms.Compose([transforms.Lambda(cls.normalise_for_astropt)])
+
+    def __init__(
+        self,
+        modality_registry,
+        modes,
+        resize=True,
+        resize_mode="match",
+    ):
+        self.galproc = GalaxyImageDataset(
+            None,
+            spiral=True,
+            transform={"images": self.data_transforms()},
+            modality_registry=modality_registry,
+        )
+        self.modes = modes
+        self.f2p = partial(
+            flux_to_pil, resize=resize, resize_mode=resize_mode
+        )
+
+    def __call__(self, idx):
+        result = {}
+        for mode in self.modes:
+            if (mode == "desi") or (mode == "sdss"):
+                continue
+            else:
+                im = self.f2p(idx[f"{mode}_image"], mode, self.modes).swapaxes(0, 2)
+                im = self.galproc.process_galaxy(
+                    torch.from_numpy(im).to(torch.float)
+                ).to(torch.float)
+                result[f"{mode}_images"] = im
+                result[f"{mode}_positions"] = torch.arange(0, len(im), dtype=torch.long)
+
+        return result
+
+
+def _get_norm_consts(mode, band_names):
+    """Load norm constants from percentiles.json."""
+    percentiles = _load_percentiles()
+    if percentiles is None:
+        raise FileNotFoundError(
+            "Percentiles file not found. Set $BAZAAR_PERCENTILES_PATH or "
+            "ship the JSON inside bazaar/embed/data/."
+        )
+    mode_data = percentiles[mode]
+    return {
+        band: (mode_data[band]["p1"], mode_data[band]["p99"])
+        for band in band_names
+    }
+
+
+def flux_to_pil(blob, mode, modes, resize=True, norm_mode="arcsinh", resize_mode="match", stretch_alpha=20):
+    """
+    Convert raw fluxes to PIL imagery
+
+    norm_mode: "arcsinh" (default) — arcsinh stretch with global percentile softening
+               "linear" — linear percentile clip (old default)
+               "per_image" — per-image arcsinh (no global percentiles)
+    """
+
+    def _norm(chan, percentiles=None, mode="arcsinh"):
+        if percentiles is not None:
+            v0, v1 = percentiles
+            if mode == "arcsinh":
+                t = (chan - v0) / (v1 - v0)
+                stretched = np.arcsinh(stretch_alpha * t)
+                s_high = np.arcsinh(stretch_alpha)
+                chan = (stretched / s_high).clip(0, 1)
+            else:  # linear
+                chan = ((chan - v0) / (v1 - v0)).clip(0, 1)
+        else:
+            # per-image fallback
+            p1 = np.percentile(chan, 1)
+            p99 = np.percentile(chan, 99)
+            t = (chan - p1) / (p99 - p1)
+            stretched = np.arcsinh(stretch_alpha * t)
+            s_high = np.arcsinh(stretch_alpha)
+            chan = (stretched / s_high).clip(0, 1)
+        return chan
+
+    arr = np.asarray(blob["flux"], np.float32)
+    if mode == "hsc":  # 160x160 pixels in MMU dataset
+        if arr.ndim == 3:
+            arr = np.stack([arr[0], arr[1], arr[3]], axis=-1)  # grz
+        elif arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        else:
+            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
+
+        if resize:
+            if resize_mode == "fill":
+                arr = resize_galaxy_to_fit(
+                    arr, target_size=96
+                )
+            else:  # match
+                arr = resize_galaxy_to_fit(
+                    arr, force_extent=(68, 92, 68, 92), target_size=96
+                )
+
+        if norm_mode in ("arcsinh", "linear"):
+            norm_consts = _get_norm_consts("hsc", ("g", "r", "z"))
+            arr = np.stack(
+                [
+                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
+                    for ii, band in enumerate(("g", "r", "z"))
+                ],
+                axis=-1,
+            )
+
+    if mode == "jwst":  # 0.04 pixel per arcsec, 96x96 pixels in MMU dataset
+        if arr.ndim == 3:
+            arr = np.stack([arr[0], arr[4], arr[6]], axis=-1)
+        elif arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        else:
+            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
+
+        if norm_mode in ("arcsinh", "linear"):
+            norm_consts = _get_norm_consts("jwst", ("f090w", "f277w", "f444w"))
+            arr = np.stack(
+                [
+                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
+                    for ii, band in enumerate(("f090w", "f277w", "f444w"))
+                ],
+                axis=-1,
+            )
+
+    if mode == "legacysurvey":
+        if arr.ndim == 3:
+            arr = np.stack([arr[0], arr[1], arr[3]], axis=-1)  # grz
+        elif arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        else:
+            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
+
+        if resize:
+            # we always resize legacy to match hsc for our use-case
+            if resize_mode == "fill":
+                arr = resize_galaxy_to_fit(
+                    arr, target_size=96
+                )
+            else:  # match
+                arr = resize_galaxy_to_fit(
+                    arr, force_extent=(72, 88, 72, 88), target_size=96
+                )
+
+        if norm_mode in ("arcsinh", "linear"):
+            norm_consts = _get_norm_consts("legacysurvey", ("g", "r", "z"))
+            arr = np.stack(
+                [
+                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
+                    for ii, band in enumerate(("g", "r", "z"))
+                ],
+                axis=-1,
+            )
+
+    if norm_mode == "per_image":
+        arr = _norm(arr)
+    arr = (arr[..., ::-1] * 255).astype(np.uint8)
+    return arr

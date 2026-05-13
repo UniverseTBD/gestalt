@@ -27,14 +27,15 @@ from pathlib import Path
 import numpy as np
 
 from bazaar.align import mcca_fit, mcca_transform
-from bazaar.pipeline import (
+from bazaar.whiten import (
     pca_zscore_fit,
     pca_zscore_transform,
     zscore_fit,
     zscore_transform,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_LOAD_VERSIONS = {1, 2}
 WHITEN_MODES = ("pca_zscore", "zscore")
 
 
@@ -59,7 +60,7 @@ class BazaarFit:
     basket: list[tuple[str, str]]
     pca: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)
     mcca_V: np.ndarray | None = None
-    whiten_mode: str = "pca_zscore"
+    whiten_mode: str = "zscore"
 
     @classmethod
     def fit(
@@ -68,7 +69,7 @@ class BazaarFit:
         basket: list[tuple[str, str]],
         D: int,
         seed: int = 0,
-        whiten_mode: str = "pca_zscore",
+        whiten_mode: str = "zscore",
     ) -> "BazaarFit":
         """Fit on a dict {model_key: (N, d_m) ndarray}.
 
@@ -118,6 +119,19 @@ class BazaarFit:
                 Zs.append(zscore_transform(E, self.pca[key]))
         return mcca_transform(Zs, self.mcca_V)
 
+    def __call__(self, input, **kwargs) -> np.ndarray:
+        """Apply this fit to either pre-computed embeddings or a fresh input.
+
+        - If `input` is a `dict[str, ndarray]` of per-model embeddings, delegate
+          to `.transform`.
+        - Otherwise treat `input` as a dataset id or path and run the full
+          embed + transform pipeline via `bazaar.api.run`.
+        """
+        if isinstance(input, dict):
+            return self.transform(input)
+        from bazaar.api import run  # local import: api → fit back-edge
+        return run(input, fit=self, **kwargs)
+
     def save(self, fit_dir: Path | str) -> None:
         fit_dir = Path(fit_dir)
         (fit_dir / "pca").mkdir(parents=True, exist_ok=True)
@@ -157,13 +171,13 @@ class BazaarFit:
     def load(cls, fit_dir: Path | str) -> "BazaarFit":
         fit_dir = Path(fit_dir)
         meta = json.loads((fit_dir / "meta.json").read_text())
-        if meta["schema_version"] != SCHEMA_VERSION:
+        if meta["schema_version"] not in SUPPORTED_LOAD_VERSIONS:
             raise ValueError(
                 f"Unsupported schema_version {meta['schema_version']} "
-                f"(this code supports {SCHEMA_VERSION})"
+                f"(this code supports {sorted(SUPPORTED_LOAD_VERSIONS)})"
             )
         basket = [tuple(t) for t in meta["basket"]]
-        # Pre-`whiten_mode` fits (shipped default included) are pca_zscore.
+        # Pre-`whiten_mode` v1 fits (shipped default included) are pca_zscore.
         whiten_mode = meta.get("whiten_mode", "pca_zscore")
         if whiten_mode not in WHITEN_MODES:
             raise ValueError(

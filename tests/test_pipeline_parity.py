@@ -13,9 +13,9 @@ from __future__ import annotations
 import numpy as np
 
 from bazaar.align import mcca_basket
+from bazaar.bench.probe import run_probe
 from bazaar.fit import BazaarFit
-from bazaar.pipeline import pca_zscore_fit
-from bazaar.probe import run_probe
+from bazaar.whiten import pca_zscore_fit
 
 
 def _synthetic_basket(
@@ -35,7 +35,8 @@ def _synthetic_basket(
 def test_mcca_basket_close_to_fit_transform():
     """Legacy U*sv and refactored C@V differ only by randomized-SVD error."""
     embeddings, basket, _ = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
 
     Zs = [pca_zscore_fit(embeddings[f"{f}_{s}"], D=16, seed=0)[0] for f, s in basket]
     S_legacy = mcca_basket(Zs, D=16, seed=0)
@@ -51,7 +52,8 @@ def test_mcca_basket_close_to_fit_transform():
 def test_probe_r2_parity_within_tolerance():
     """Linear-probe R² on the new MCCA basket source matches legacy to <1e-3."""
     embeddings, basket, factors = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
 
     Zs = [pca_zscore_fit(embeddings[f"{f}_{s}"], D=16, seed=0)[0] for f, s in basket]
     S_legacy = mcca_basket(Zs, D=16, seed=0)

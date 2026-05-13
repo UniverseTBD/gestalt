@@ -1,13 +1,16 @@
 """Basket composition and embedding cache.
 
 The default basket is 22 (family, size) checkpoints across 8 foundation-model
-families that are already published as per-row .npy embeddings under
-`UniverseTBD/pu-embeddings/cosmosweb/`. Each file is keyed by telescope,
-family, and size, with 45 000 rows aligned to the COSMOS-Web HSC×JWST
-crossmatch (`Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2`).
+families. Each entry resolves to a HuggingFace model name (or astropt repo)
+via `MODEL_REGISTRY`, which is consumed by `bazaar.embed.embed_basket`.
+
+A legacy `.npy` cache layout (used by `bazaar bench`) is keyed by telescope,
+family, size, and a 45 000-row crossmatch — see `emb_npy_path`.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -26,6 +29,48 @@ BASKET: list[tuple[str, str]] = [
     ("convnext", "nano"), ("convnext", "tiny"),
     ("convnext", "base"), ("convnext", "large"),
 ]
+
+# (family, size) → (adapter_alias, hf_model_name). The adapter alias is what
+# `bazaar.embed.models.get_adapter()` keys on; the hf_model_name is what the
+# adapter's `load()` passes to `from_pretrained`. Lifted from
+# `pu/experiments.py:53-147` for the 8 families in BASKET.
+MODEL_REGISTRY: dict[tuple[str, str], tuple[str, str]] = {
+    # astropt — all sizes share the same astropt repo; size string selects the checkpoint
+    ("astropt", "015M"): ("astropt", "Smith42/astroPT_v2.0"),
+    ("astropt", "095M"): ("astropt", "Smith42/astroPT_v2.0"),
+    ("astropt", "850M"): ("astropt", "Smith42/astroPT_v2.0"),
+    # ijepa
+    ("ijepa", "huge"):  ("ijepa", "facebook/ijepa_vith14_22k"),
+    ("ijepa", "giant"): ("ijepa", "facebook/ijepa_vitg16_22k"),
+    # vjepa
+    ("vjepa", "large"): ("vjepa", "facebook/vjepa2-vitl-fpc64-256"),
+    ("vjepa", "huge"):  ("vjepa", "facebook/vjepa2-vith-fpc64-256"),
+    ("vjepa", "giant"): ("vjepa", "facebook/vjepa2-vitg-fpc64-256"),
+    # vit
+    ("vit", "base"):  ("vit", "google/vit-base-patch16-224-in21k"),
+    ("vit", "large"): ("vit", "google/vit-large-patch16-224-in21k"),
+    ("vit", "huge"):  ("vit", "google/vit-huge-patch14-224-in21k"),
+    # vit-mae
+    ("vit-mae", "base"):  ("vit-mae", "facebook/vit-mae-base"),
+    ("vit-mae", "large"): ("vit-mae", "facebook/vit-mae-large"),
+    ("vit-mae", "huge"):  ("vit-mae", "facebook/vit-mae-huge"),
+    # clip
+    ("clip", "base"):  ("clip", "openai/clip-vit-base-patch16"),
+    ("clip", "large"): ("clip", "openai/clip-vit-large-patch14"),
+    # llava_15
+    ("llava_15", "7b"):  ("llava_15", "llava-hf/llava-1.5-7b-hf"),
+    ("llava_15", "13b"): ("llava_15", "llava-hf/llava-1.5-13b-hf"),
+    # convnext
+    ("convnext", "nano"):  ("convnext", "facebook/convnextv2-nano-22k-224"),
+    ("convnext", "tiny"):  ("convnext", "facebook/convnextv2-tiny-22k-224"),
+    ("convnext", "base"):  ("convnext", "facebook/convnextv2-base-22k-224"),
+    ("convnext", "large"): ("convnext", "facebook/convnextv2-large-22k-224"),
+}
+
+
+def basket_signature(basket: list[tuple[str, str]] = BASKET) -> str:
+    """Deterministic 16-hex fingerprint of the basket order + composition."""
+    return hashlib.sha1(json.dumps(basket).encode()).hexdigest()[:16]
 
 DATASET = "Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2"
 DS_TAG = DATASET.split("/")[-1]

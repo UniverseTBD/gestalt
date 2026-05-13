@@ -6,7 +6,7 @@ import pytest
 
 from bazaar.align import mcca_fit
 from bazaar.fit import BazaarFit
-from bazaar.pipeline import pca_zscore_fit
+from bazaar.whiten import pca_zscore_fit
 
 
 def _synthetic_basket(
@@ -31,7 +31,8 @@ def _synthetic_basket(
 def test_fit_stores_same_V_as_direct_mcca():
     """BazaarFit.fit's V matches `mcca_fit` invoked on the same internal Zs."""
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
 
     # Reconstruct the exact fit-time Zs (pca_zscore_fit, not _transform).
     Zs_ref = [
@@ -51,7 +52,8 @@ def test_transform_on_fit_data_recovers_subspace():
     space is preserved.
     """
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
 
     Zs_ref = [
         pca_zscore_fit(embeddings[f"{f}_{s}"], D=16, seed=0)[0]
@@ -144,15 +146,22 @@ def test_zscore_mode_round_trip(tmp_path):
 
 
 def test_legacy_fit_without_whiten_mode_loads_as_pca_zscore(tmp_path):
-    """Fits saved before the whiten_mode field existed still load."""
+    """Fits saved before the whiten_mode field existed still load.
+
+    v1 fits without `whiten_mode` are pca_zscore by definition. We simulate
+    that legacy artifact by saving a pca_zscore fit, dropping the field, then
+    rolling schema_version back to 1.
+    """
     import json
 
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0,
+                        whiten_mode="pca_zscore")
     fit.save(tmp_path / "legacy")
     meta_path = tmp_path / "legacy" / "meta.json"
     meta = json.loads(meta_path.read_text())
-    meta.pop("whiten_mode")  # simulate a pre-feature fit on disk
+    meta.pop("whiten_mode")
+    meta["schema_version"] = 1
     meta_path.write_text(json.dumps(meta))
 
     reloaded = BazaarFit.load(tmp_path / "legacy")

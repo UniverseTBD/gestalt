@@ -1,38 +1,35 @@
-"""The Bazaar — aligned-basket evaluation of foundation models.
+"""The Bazaar — aligned-basket galaxy embeddings.
 
-A small library + CLI for testing whether the *average* embedding from a
-heterogeneous basket of frozen foundation models outperforms any single
-model on a downstream linear-probe task, after aligning the per-model
-representations via Procrustes (GPA) or MCCA.
+Public API (three verbs):
+
+    from bazaar import run, fit, load
+
+    # Embed and apply the shipped fit
+    embs = run("UniverseTBD/mmu_hsc_pdr3_dud_22.5")
+
+    # Fit a fresh BazaarFit
+    fit_obj = fit("UniverseTBD/mmu_hsc_pdr3_dud_22.5", D=1024, out="fits/mine")
+
+    # Reload a saved fit (callable: pass an input to embed + transform)
+    fit_obj = load("fits/mine")
+    embs = fit_obj("UniverseTBD/some_other_dataset")
+
+Lower-level primitives `mcca_fit`/`mcca_transform` are also exposed for users
+who already have per-model embeddings. The benchmark sweep (GPA, naive-mean,
+linear probe, plotting) lives under `bazaar.bench` and is *not* part of this
+import surface.
 """
-from bazaar.align import (
-    generalized_procrustes,
-    mcca_basket,
-    mcca_fit,
-    mcca_transform,
-    orthogonal_procrustes,
-)
+from bazaar.align import mcca_fit, mcca_transform
+from bazaar.api import fit, load, run
 from bazaar.basket import BASKET
 from bazaar.fit import BazaarFit
-from bazaar.pipeline import (
-    pca_and_zscore,
-    pca_zscore_fit,
-    pca_zscore_transform,
-    run_modality,
-)
-from bazaar.probe import run_probe
 
 __all__ = [
     "BASKET",
     "BazaarFit",
-    "generalized_procrustes",
-    "mcca_basket",
+    "fit",
+    "load",
     "mcca_fit",
     "mcca_transform",
-    "orthogonal_procrustes",
-    "pca_and_zscore",
-    "pca_zscore_fit",
-    "pca_zscore_transform",
-    "run_modality",
-    "run_probe",
+    "run",
 ]
