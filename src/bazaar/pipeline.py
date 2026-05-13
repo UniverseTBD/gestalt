@@ -21,7 +21,7 @@ from datasets import load_dataset
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
-from bazaar.align import generalized_procrustes, mcca_basket
+from bazaar.align import generalized_procrustes
 from bazaar.basket import DATASET, emb_npy_path
 from bazaar.probe import run_probe
 
@@ -104,19 +104,25 @@ def run_modality(
     test_size: int,
     emb_dir,
 ) -> list[dict]:
+    from bazaar.fit import BazaarFit  # local import: fit.py imports from this module
+
     rows: list[dict] = []
     print(f"\n[bazaar] === {telescope.upper()} ===")
     print(f"[bazaar] Loading {len(basket)} embeddings + PCA-{D}...")
 
-    Z_by_model: dict[str, np.ndarray] = {}
-    for fam, size in tqdm(basket, desc=f"  {telescope} PCA"):
+    embeddings: dict[str, np.ndarray] = {}
+    for fam, size in tqdm(basket, desc=f"  {telescope} load"):
         E = np.load(emb_npy_path(emb_dir, telescope, fam, size), mmap_mode="r")
-        E = np.asarray(E[:n_use], dtype=np.float32)
-        Z_by_model[f"{fam}_{size}"] = pca_and_zscore(E, D=D, seed=0)
+        embeddings[f"{fam}_{size}"] = np.asarray(E[:n_use], dtype=np.float32)
         del E
 
-    model_names = list(Z_by_model.keys())
-    Zs = list(Z_by_model.values())
+    fit = BazaarFit.fit(embeddings, basket=basket, D=D, seed=0)
+    model_names = [f"{f}_{s}" for f, s in basket]
+    Z_by_model = {
+        name: pca_zscore_transform(embeddings[name], fit.pca[name])
+        for name in model_names
+    }
+    Zs = [Z_by_model[name] for name in model_names]
 
     stack = np.stack(Zs, axis=0)
     B_naive = stack.mean(axis=0)
@@ -129,8 +135,8 @@ def run_modality(
     print(f"[bazaar] {telescope}: GPA converged in {gpa_info['iterations']} iters, "
           f"final mean-Frob² = {gpa_info['loss']:.4e}")
 
-    print(f"[bazaar] {telescope}: running MCCA on {len(Zs)} models (D={D})...")
-    B_mcca = mcca_basket(Zs, D=D, seed=0)
+    print(f"[bazaar] {telescope}: applying MCCA fit to {len(Zs)} models (D={D})...")
+    B_mcca = fit.transform(embeddings)
     print(f"[bazaar] {telescope}: MCCA shared latent shape={B_mcca.shape}")
 
     for prop in PROPERTIES:
