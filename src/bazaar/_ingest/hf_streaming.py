@@ -12,6 +12,7 @@ percentile sets shipped in `bazaar/embed/data/percentiles.json`:
   - "hsc"          — HSC PDR (g, r, i, z[, y]) — picks bands [0,1,3] → grz
   - "jwst"         — JWST NIRCam (f090w … f444w)
   - "legacysurvey" — DECaLS / Legacy Survey (g, r, [i,] z[, w1…w4])
+  - "rgb"          — generic 3-band JPG/PNG passthrough (no transforms)
 """
 from __future__ import annotations
 
@@ -22,28 +23,7 @@ from typing import Iterator
 
 from datasets import load_dataset
 
-
-def _modality_from_bands(bands) -> str:
-    """Infer modality from a list of band names.
-
-    JWST NIRCam bands match `f###w`; HSC bands tend to include filters named
-    after Sloan grizy (sometimes prefixed `HSC-`); everything else with grz
-    is treated as legacysurvey. A bands list that contains "HSC" anywhere
-    (case-insensitive) wins as "hsc" over the grz fallback.
-    """
-    if bands is None:
-        raise ValueError("image row is missing the 'band' field — cannot infer modality")
-    s = {str(b).lower() for b in bands}
-    if any(b.startswith("f") and b[1:].rstrip("w").isdigit() for b in s):
-        return "jwst"
-    if any("hsc" in b for b in s) or s == {"g", "r", "i", "z"} or s == {"g", "r", "i", "z", "y"}:
-        return "hsc"
-    if {"g", "r", "z"} <= s:
-        return "legacysurvey"
-    raise ValueError(
-        f"could not infer modality from bands {sorted(s)!r}; "
-        f"pass modality= explicitly (one of: hsc, jwst, legacysurvey)"
-    )
+from bazaar.modalities import infer_from_bands
 
 
 @dataclass
@@ -122,7 +102,7 @@ def iter_galaxies(
                 f"first row of {input!r} missing 'image' column; "
                 f"got keys {list(first.keys())!r}"
             )
-        modality = _modality_from_bands(img.get("band"))
+        modality = infer_from_bands(img.get("band"))
 
     fp = _fingerprint(input, split, max_samples, modality, basket_signature)
     return CatalogSource(
