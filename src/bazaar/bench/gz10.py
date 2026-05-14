@@ -19,19 +19,13 @@ covers the whole gz10 train split since there's only a single modality.
 """
 from __future__ import annotations
 
-import gc
-
 import numpy as np
-from sklearn.decomposition import PCA
 
 from bazaar._ingest.gz10 import GZ10_DATASET, GZ10_MODALITY, gz10_source, stream_labels
-from bazaar.align import mcca_fit
 from bazaar.basket import BASKET, basket_signature
+from bazaar.bench._runner import build_basket_sources, whiten_per_model
 from bazaar.bench.probe import run_classification_probe, run_probe
 from bazaar.embed import embed_basket
-from bazaar.whiten import pca_zscore_fit, zscore_fit
-
-WHITEN_MODES = ("pca_zscore", "zscore")
 
 # (property, kind). `kind` picks the probe.
 PROPERTIES: list[tuple[str, str]] = [
@@ -51,15 +45,15 @@ def catalog_pass(
 
 
 def _probe_one(B: np.ndarray, y: np.ndarray, kind: str, test_size: int, seed: int) -> dict:
-    """Run the appropriate probe; return a flat dict of metrics."""
+    """Run the appropriate probe; return r2/acc/f1 with NaN where inapplicable."""
     if kind == "classification":
         acc, f1 = run_classification_probe(
             B, y, test_size=test_size, random_state=seed,
         )
-        return {"acc": acc, "f1": f1}
+        return {"r2": np.nan, "acc": acc, "f1": f1}
     elif kind == "regression":
         r2 = run_probe(B, y, test_size=test_size, random_state=seed)
-        return {"r2": r2}
+        return {"r2": r2, "acc": np.nan, "f1": np.nan}
     else:
         raise ValueError(f"unknown probe kind {kind!r}")
 
@@ -78,13 +72,10 @@ def run_gz10(
 ) -> list[dict]:
     """Full embed + align + probe sweep on gz10.
 
-    Returns long-form rows: each row has `property`, `source`, `seed`, plus
-    `acc`/`f1` (classification) or `r2` (regression). Untouched metrics are
-    `NaN` so callers can pivot the table without conditional logic.
+    Returns long-form rows with the unified schema (modality, property, kind,
+    source, seed, r2, acc, f1, n_valid). Metrics inapplicable to a given probe
+    kind are NaN so callers can pivot without conditional logic.
     """
-    if whiten_mode not in WHITEN_MODES:
-        raise ValueError(f"whiten_mode must be one of {WHITEN_MODES}, got {whiten_mode!r}")
-
     sig = basket_signature(basket)
     source = gz10_source(split=split, max_samples=max_samples, basket_signature=sig)
     print(f"[bazaar.gz10] === gz10 ({whiten_mode}) D={D} ===")
@@ -104,72 +95,28 @@ def run_gz10(
           f"redshift_valid_frac={float(np.isfinite(params['redshift']).mean()):.3f}")
 
     model_names = [f"{f}_{s}" for f, s in basket]
-    # Per-model features for the single-model probes. Independent of the basket
-    # source: pca_zscore reduces to D per model, zscore keeps native widths.
-    if whiten_mode == "pca_zscore":
-        Z_by_model = {
-            name: pca_zscore_fit(embeddings[name], D=D, seed=0)[0]
-            for name in model_names
-        }
-        single_tag = f"pca{D}"
-    else:
-        Z_by_model = {
-            name: zscore_fit(embeddings[name])[0]
-            for name in model_names
-        }
-        single_tag = "zscore"
-    Zs = [Z_by_model[name] for name in model_names]
-
-    basket_sources: list[tuple[str, np.ndarray]] = []
-
-    raw_widths = [embeddings[name].shape[1] for name in model_names]
-    print(f"[bazaar.gz10] full-rank whitened MCCA on {len(model_names)} models "
-          f"(per-model native widths={raw_widths}, sum={sum(raw_widths)}, D={D})...")
-    Zs_white = [
-        pca_zscore_fit(embeddings[name], D=embeddings[name].shape[1])[0]
-        for name in model_names
-    ]
-    _, B_mcca_whitened = mcca_fit(Zs_white, D=D, seed=0)
-    basket_sources.append(("basket_mcca_whitened", B_mcca_whitened))
-    print(f"[bazaar.gz10] full-rank whitened MCCA shared latent shape={B_mcca_whitened.shape}")
-    del Zs_white
-    gc.collect()
-
-    print(f"[bazaar.gz10] concat→PCA-to-{D} ablation on "
-          f"{sum(raw_widths)}-d raw concatenation...")
-    C_raw = np.concatenate(
-        [embeddings[name] for name in model_names], axis=1,
-    ).astype(np.float32)
-    B_concat_pca = PCA(
-        n_components=D, svd_solver="randomized", random_state=0,
-    ).fit_transform(C_raw).astype(np.float32)
-    del C_raw
-    gc.collect()
-    basket_sources.append(("basket_concat_pca", B_concat_pca))
+    Zs, single_tag = whiten_per_model(embeddings, model_names, D=D, whiten_mode=whiten_mode)
+    basket_sources = build_basket_sources(
+        embeddings, model_names, D=D, log_prefix="[bazaar.gz10]",
+    )
 
     rows: list[dict] = []
     for prop, kind in PROPERTIES:
         y = params[prop]
+        n_valid = int(np.isfinite(y).sum()) if kind == "regression" else int(y.shape[0])
         for seed in range(n_seeds):
             for source_name, B in basket_sources:
                 metrics = _probe_one(B, y, kind, test_size=test_size, seed=seed)
                 rows.append(dict(
-                    modality=GZ10_MODALITY,
-                    property=prop,
-                    kind=kind,
-                    source=source_name,
-                    seed=seed,
-                    **metrics,
+                    modality=GZ10_MODALITY, property=prop, kind=kind,
+                    source=source_name, seed=seed, n_valid=n_valid, **metrics,
                 ))
             for name, Z in zip(model_names, Zs):
                 metrics = _probe_one(Z, y, kind, test_size=test_size, seed=seed)
                 rows.append(dict(
-                    modality=GZ10_MODALITY,
-                    property=prop,
-                    kind=kind,
-                    source=f"single_{name}_{single_tag}",
-                    seed=seed,
-                    **metrics,
+                    modality=GZ10_MODALITY, property=prop, kind=kind,
+                    source=f"single_{name}_{single_tag}", seed=seed,
+                    n_valid=n_valid, **metrics,
                 ))
 
         # Per-property summary print.

@@ -21,17 +21,19 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 
 ## CLI surface (`bazaar = bazaar.cli:main`)
 
-- `bazaar run --D 256 --out data/results.parquet` — full benchmark sweep. Downloads ~8 GB of cached per-model `.npy` embeddings on first run via `scripts/stream_embeddings_to_npy.py`; writes long-form parquet (modality × property × seed × source).
-- `bazaar plot --data ... --suffix _pca256` — renders per-modality strip plots, 2×3 summary grid, stats table into `figs/`.
-- `bazaar fit --modality {hsc,jwst} --D 256 --out fits/<dir>` — fit a `BazaarFit` and save it.
-- `bazaar transform --fit {<dir>|default} --modality ... --out unified.npy` — apply a saved fit. `--fit default` downloads the shipped COSMOS-Web D=256 fit from HF.
-- `bazaar embed --modality ... --pu-path /path/to/pu` — pre-warm the per-model embedding cache by shelling out to `pu run`.
+- `bazaar run <input> --fit {<dir>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` downloads the shipped COSMOS-Web D=256 fit from HF.
+- `bazaar fit <input> --D 1024 --out fits/<dir>` — embed `<input>` and fit a fresh `BazaarFit` to disk.
+- `bazaar load <fit_dir>` — print a saved fit's meta + `V` shape.
+- `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir data/embeddings` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
+- `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
+- `bazaar bench galaxies --out data/galaxies.parquet` — Smith42/galaxies (v2.0) sweep (13 paper-faithful regression targets).
+- `bazaar plot --data <parquet> --suffix _pca256` — strip plots, 2×3 summary grid, stats table into `figs/`.
 
-All `fit`/`transform`/`embed` commands take either `--emb-dir` (pre-cached `.npy` files) **or** `--pu-path` (will shell out to `pu run --model <family>` once per family and harvest the parquets into the `.npy` cache layout). `PU_PATH` env var is honoured.
+`run`/`fit` infer modality from the input dataset's band list (override with `--modality`); per-model `.npy` embeddings are cached under `~/.cache/bazaar/embeds`. There is no `bazaar embed` or `bazaar transform` subcommand — the equivalents are `bazaar.embed.embed_basket` and `BazaarFit.transform` in the Python API.
 
 ## Architecture
 
-The package is intentionally flat — eight modules under `src/bazaar/`. The data flow is linear:
+The package is seven top-level modules under `src/bazaar/` plus three sub-packages (`bench/`, `embed/`, `_ingest/`). The data flow is linear:
 
 ```
 raw images ──(optional: bazaar.embed)──> per-model .npy cache
@@ -61,15 +63,15 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 
 **Module roles:**
 
-- `basket.py` — the canonical `BASKET` list (22 (family, size) tuples), HF download glue, and `load_embeddings`. Also resolves `--fit default` by downloading from `UniverseTBD/pu-embeddings:bazaar-fits/cosmosweb-d256-<modality>/`.
+- `basket.py` — the canonical `BASKET` list (22 (family, size) tuples), HF download glue, `load_embeddings`, and `ensure_default_fit_downloaded` (resolves `--fit default`).
 - `align.py` — `mcca_fit` (returns `V` + fit-time `S`) and `mcca_transform`. Unsupervised; operates on already-whitened per-model features.
 - `whiten.py` — `pca_zscore_fit` / `pca_zscore_transform` (PCA-to-D then per-feature z-score) and `zscore_fit` / `zscore_transform` (no PCA). Tiny and dependency-light so `fit.py` can import it without dragging in the benchmark suite.
-- `bench/cosmosweb.py` — COSMOS-Web benchmark orchestrator (`run_cosmosweb`) over `Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2`. Sibling sweeps live in `bench/gz10.py` (`run_gz10`) and `bench/galaxies.py` (`run_galaxies`).
 - `fit.py` — the persistent `BazaarFit` dataclass. `SCHEMA_VERSION = 4`; bump it if you change the on-disk layout.
-- `embed.py` — only file that touches parquet; shells out to `uv run --directory <pu_path> pu run --model <family>`, then harvests `<pu_path>/data/<mode>_<family>_<size>.parquet` into the `.npy` cache. Column naming convention is `<family>_<size.lstrip('0')>_<modality>` (pu convention, do not change here).
-- `probe.py` — `StandardScaler + LinearRegression`, 1st/99th-percentile clip on targets, `test_size=5000` held out. Numbers must stay directly comparable to upstream `pu`'s regression script.
-- `cli.py` — argparse subcommands; default cache dirs are `~/.cache/bazaar/embeds` and `~/.cache/bazaar/fits`.
-- `plotting.py` — render-only, no recomputation.
+- `api.py` — the three Python verbs `run`, `fit`, `load`.
+- `cli.py` — argparse subcommands.
+- `_ingest/` — HF dataset adapters (`hf_streaming`, `gz10`, `galaxies`) that produce `CatalogSource` rows + label streams.
+- `embed/` — per-model embedding pipeline (`embed_basket`), preprocessing, zoom/crop, and model adapters. Vendored from `platonic-universe`.
+- `bench/` — `probe.run_probe` / `run_classification_probe` (linear/logistic probes), three dataset sweeps (`cosmosweb.py`, `gz10.py`, `galaxies.py`) on a shared `_runner.py` (whitening + basket-source construction), and `plotting.py` (render-only). All sweeps emit the same long-form schema: `modality, property, kind, source, seed, r2, acc, f1, n_valid` (NaN where the metric is inapplicable to the probe kind).
 
 ## Conventions worth knowing
 
@@ -78,4 +80,4 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 - **Float32 throughout.**
 - **Randomized SVD** (sklearn) is used in both PCA and MCCA. Determinism comes from the `seed` arg, not from being exact.
 - **Embeddings cache layout:** `<emb_dir>/<telescope>_embeddings_cosmosweb-hsc-jwst-high-snr-pil2_<family>_<size>_45000.npy`. The streaming script downloads parquets and converts in-place to bound peak disk to one embedding at a time.
-- **`.gitignore` excludes `data/`, `figs/`, `analysis/`, and all `*.parquet` / `*.npy`** — those are experiment artefacts, not source.
+- **`.gitignore` excludes `data/`, `figs/`, `analysis/`, `embeds/`, `embeds_galaxies/`, and all `*.parquet` / `*.npy`** — those are experiment artefacts and embedding caches, not source.

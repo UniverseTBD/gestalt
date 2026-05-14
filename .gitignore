@@ -10,6 +10,8 @@ dist/
 /data/
 /figs/
 /analysis/
+/embeds/
+/embeds_galaxies/
 *.parquet
 *.npy
 

@@ -7,7 +7,7 @@ For each telescope `M ∈ {hsc, jwst}`:
 1. **Load** all 22 pre-published `.npy` embeddings `E_m ∈ R^{N × d_m}`
    from `UniverseTBD/pu-embeddings/cosmosweb/`. Native dims `d_m` range
    from 384 (AstroPT-015M) to 5120 (LLaVA-1.5-13B).
-2. **PCA + z-score** (`bazaar.whiten.pca_and_zscore`). Randomised-SVD
+2. **PCA + z-score** (`bazaar.whiten.pca_zscore_fit`). Randomised-SVD
    PCA to `D ∈ {128, 256}` components, then per-feature z-score on the
    full N=45 000 rows. Output: `Ẑ_m ∈ R^{N × D}` for each model.
 3. **Form two basket sources**:

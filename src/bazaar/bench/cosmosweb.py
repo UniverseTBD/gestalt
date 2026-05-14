@@ -17,19 +17,13 @@ Output is long-form: one row per (modality, property, seed, source).
 """
 from __future__ import annotations
 
-import gc
-
 import numpy as np
 from datasets import load_dataset
-from sklearn.decomposition import PCA
 from tqdm import tqdm
 
-from bazaar.align import mcca_fit
 from bazaar.basket import DATASET, load_embeddings
+from bazaar.bench._runner import build_basket_sources, whiten_per_model
 from bazaar.bench.probe import run_probe
-from bazaar.whiten import pca_zscore_fit, zscore_fit
-
-WHITEN_MODES = ("pca_zscore", "zscore")
 
 # Physics parameter → dataset column for Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2.
 CATALOG_COLUMNS = {
@@ -69,75 +63,34 @@ def run_cosmosweb(
     emb_dir,
     whiten_mode: str = "pca_zscore",
 ) -> list[dict]:
-    if whiten_mode not in WHITEN_MODES:
-        raise ValueError(f"whiten_mode must be one of {WHITEN_MODES}, got {whiten_mode!r}")
-
-    rows: list[dict] = []
     print(f"\n[bazaar] === {telescope.upper()} ({whiten_mode}) ===")
     print(f"[bazaar] Loading {len(basket)} embeddings + whiten={whiten_mode}, D={D}...")
 
     embeddings = load_embeddings(basket, telescope, emb_dir, n_use=n_use)
     model_names = [f"{f}_{s}" for f, s in basket]
-    # Per-model features for the single-model probes. Independent of the basket
-    # source: pca_zscore reduces to D per model (matching upstream `pu`), zscore
-    # keeps native widths as a PCA ablation.
-    if whiten_mode == "pca_zscore":
-        Z_by_model = {
-            name: pca_zscore_fit(embeddings[name], D=D, seed=0)[0]
-            for name in model_names
-        }
-        single_tag = f"pca{D}"
-    else:
-        Z_by_model = {
-            name: zscore_fit(embeddings[name])[0]
-            for name in model_names
-        }
-        single_tag = "zscore"
-    Zs = [Z_by_model[name] for name in model_names]
+    Zs, single_tag = whiten_per_model(embeddings, model_names, D=D, whiten_mode=whiten_mode)
+    basket_sources = build_basket_sources(
+        embeddings, model_names, D=D, log_prefix=f"[bazaar] {telescope}:",
+    )
 
-    basket_sources: list[tuple[str, np.ndarray]] = []
-
-    raw_widths = [embeddings[name].shape[1] for name in model_names]
-
-    print(f"[bazaar] {telescope}: full-rank whitened MCCA on {len(model_names)} models "
-          f"(per-model native widths={raw_widths}, sum={sum(raw_widths)}, D={D})...")
-    Zs_white = [
-        pca_zscore_fit(embeddings[name], D=embeddings[name].shape[1])[0]
-        for name in model_names
-    ]
-    _, B_mcca_whitened = mcca_fit(Zs_white, D=D, seed=0)
-    basket_sources.append(("basket_mcca_whitened", B_mcca_whitened))
-    print(f"[bazaar] {telescope}: full-rank whitened MCCA shared latent shape={B_mcca_whitened.shape}")
-    del Zs_white
-    gc.collect()
-
-    print(f"[bazaar] {telescope}: concat→PCA-to-{D} ablation on "
-          f"{sum(raw_widths)}-d raw concatenation (widths={raw_widths})...")
-    C_raw = np.concatenate(
-        [embeddings[name] for name in model_names], axis=1,
-    ).astype(np.float32)
-    B_concat_pca = PCA(
-        n_components=D, svd_solver="randomized", random_state=0,
-    ).fit_transform(C_raw).astype(np.float32)
-    del C_raw
-    gc.collect()
-    basket_sources.append(("basket_concat_pca", B_concat_pca))
-    print(f"[bazaar] {telescope}: concat→PCA shape={B_concat_pca.shape}")
-
+    rows: list[dict] = []
     for prop in PROPERTIES:
         y = params[prop]
+        n_valid = int(np.isfinite(y).sum())
         for seed in range(n_seeds):
             for source, B in basket_sources:
                 rows.append(dict(
-                    modality=telescope, property=prop, source=source,
-                    seed=seed, r2=run_probe(B, y, test_size=test_size, random_state=seed),
+                    modality=telescope, property=prop, kind="regression",
+                    source=source, seed=seed,
+                    r2=run_probe(B, y, test_size=test_size, random_state=seed),
+                    acc=np.nan, f1=np.nan, n_valid=n_valid,
                 ))
             for name, Z in zip(model_names, Zs):
                 rows.append(dict(
-                    modality=telescope, property=prop,
-                    source=f"single_{name}_{single_tag}",
-                    seed=seed,
+                    modality=telescope, property=prop, kind="regression",
+                    source=f"single_{name}_{single_tag}", seed=seed,
                     r2=run_probe(Z, y, test_size=test_size, random_state=seed),
+                    acc=np.nan, f1=np.nan, n_valid=n_valid,
                 ))
 
         def _pick(src):

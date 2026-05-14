@@ -30,10 +30,7 @@ covers a full split since galaxies is single-modality (legacysurvey).
 """
 from __future__ import annotations
 
-import gc
-
 import numpy as np
-from sklearn.decomposition import PCA
 
 from bazaar._ingest.galaxies import (
     GALAXIES_DATASET,
@@ -44,13 +41,10 @@ from bazaar._ingest.galaxies import (
     stream_image_dr8_ids,
     stream_labels,
 )
-from bazaar.align import mcca_fit
 from bazaar.basket import BASKET, basket_signature
+from bazaar.bench._runner import build_basket_sources, whiten_per_model
 from bazaar.bench.probe import run_probe
 from bazaar.embed import embed_basket
-from bazaar.whiten import pca_zscore_fit, zscore_fit
-
-WHITEN_MODES = ("pca_zscore", "zscore")
 
 # All 13 targets are continuous regression; ordering pinned for stable output.
 PROPERTIES: list[str] = list(GALAXIES_TARGETS.keys())
@@ -86,11 +80,10 @@ def run_galaxies(
 ) -> list[dict]:
     """Full embed + align + probe sweep on Smith42/galaxies (v2.0).
 
-    Returns long-form rows: each row has `property`, `source`, `seed`, `r2`.
+    Returns long-form rows with the unified schema (modality, property, kind,
+    source, seed, r2, acc, f1, n_valid). All targets are regression so
+    `acc` and `f1` are always NaN.
     """
-    if whiten_mode not in WHITEN_MODES:
-        raise ValueError(f"whiten_mode must be one of {WHITEN_MODES}, got {whiten_mode!r}")
-
     sig = basket_signature(basket)
     source = galaxies_source(
         split=split, max_samples=max_samples, basket_signature=sig,
@@ -116,48 +109,10 @@ def run_galaxies(
         print(f"  {p:14s} {f:.3f}")
 
     model_names = [f"{f}_{s}" for f, s in basket]
-    # Per-model features for the single-model probes. Independent of the basket
-    # source: pca_zscore reduces to D per model, zscore keeps native widths.
-    if whiten_mode == "pca_zscore":
-        Z_by_model = {
-            name: pca_zscore_fit(embeddings[name], D=D, seed=0)[0]
-            for name in model_names
-        }
-        single_tag = f"pca{D}"
-    else:
-        Z_by_model = {
-            name: zscore_fit(embeddings[name])[0]
-            for name in model_names
-        }
-        single_tag = "zscore"
-    Zs = [Z_by_model[name] for name in model_names]
-
-    basket_sources: list[tuple[str, np.ndarray]] = []
-
-    raw_widths = [embeddings[name].shape[1] for name in model_names]
-    print(f"[bazaar.galaxies] full-rank whitened MCCA on {len(model_names)} models "
-          f"(per-model native widths={raw_widths}, sum={sum(raw_widths)}, D={D})...")
-    Zs_white = [
-        pca_zscore_fit(embeddings[name], D=embeddings[name].shape[1])[0]
-        for name in model_names
-    ]
-    _, B_mcca_whitened = mcca_fit(Zs_white, D=D, seed=0)
-    basket_sources.append(("basket_mcca_whitened", B_mcca_whitened))
-    print(f"[bazaar.galaxies] full-rank whitened MCCA shared latent shape={B_mcca_whitened.shape}")
-    del Zs_white
-    gc.collect()
-
-    print(f"[bazaar.galaxies] concat→PCA-to-{D} ablation on "
-          f"{sum(raw_widths)}-d raw concatenation...")
-    C_raw = np.concatenate(
-        [embeddings[name] for name in model_names], axis=1,
-    ).astype(np.float32)
-    B_concat_pca = PCA(
-        n_components=D, svd_solver="randomized", random_state=0,
-    ).fit_transform(C_raw).astype(np.float32)
-    del C_raw
-    gc.collect()
-    basket_sources.append(("basket_concat_pca", B_concat_pca))
+    Zs, single_tag = whiten_per_model(embeddings, model_names, D=D, whiten_mode=whiten_mode)
+    basket_sources = build_basket_sources(
+        embeddings, model_names, D=D, log_prefix="[bazaar.galaxies]",
+    )
 
     rows: list[dict] = []
     for prop in PROPERTIES:
@@ -174,23 +129,17 @@ def run_galaxies(
         for seed in range(n_seeds):
             for source_name, B in basket_sources:
                 rows.append(dict(
-                    modality=GALAXIES_MODALITY,
-                    property=prop,
-                    kind="regression",
-                    source=source_name,
-                    seed=seed,
+                    modality=GALAXIES_MODALITY, property=prop, kind="regression",
+                    source=source_name, seed=seed,
                     r2=run_probe(B, y, test_size=eff_test, random_state=seed),
-                    n_valid=n_valid,
+                    acc=np.nan, f1=np.nan, n_valid=n_valid,
                 ))
             for name, Z in zip(model_names, Zs):
                 rows.append(dict(
-                    modality=GALAXIES_MODALITY,
-                    property=prop,
-                    kind="regression",
-                    source=f"single_{name}_{single_tag}",
-                    seed=seed,
+                    modality=GALAXIES_MODALITY, property=prop, kind="regression",
+                    source=f"single_{name}_{single_tag}", seed=seed,
                     r2=run_probe(Z, y, test_size=eff_test, random_state=seed),
-                    n_valid=n_valid,
+                    acc=np.nan, f1=np.nan, n_valid=n_valid,
                 ))
 
         def _pick(src):
