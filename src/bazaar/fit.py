@@ -2,7 +2,7 @@
 
 A `BazaarFit` is everything you need to re-apply the alignment to new data:
 
-- per-model PCA components + means
+- per-model PCA components + means (full-rank per model)
 - per-model z-score statistics (post-PCA)
 - the MCCA projector V (concatenated whitened features → shared latent)
 
@@ -13,31 +13,25 @@ On-disk layout (under `<fit_dir>/`):
 
     meta.json                       schema_version, D, seed, basket order
     pca/<family>_<size>.npz         pca_components, pca_mean, zscore_mu, zscore_sd
-    mcca.npz                        V (M*D, D)
+    mcca.npz                        V (Σ d_m, D)
 
-The directory is the artifact; the JSON pins the basket order so that V's
-row partitioning is unambiguous when loading.
+The per-model PCA runs at native rank (min(d_in, N)) — no per-model dim
+reduction. All dim reduction happens at the MCCA SVD, so V's row partitioning
+sums the per-model native widths. The JSON pins the basket order so that
+partitioning is unambiguous when loading.
 """
 from __future__ import annotations
 
 import json
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from bazaar.align import mcca_fit, mcca_transform
-from bazaar.whiten import (
-    pca_zscore_fit,
-    pca_zscore_transform,
-    zscore_fit,
-    zscore_transform,
-)
+from bazaar.whiten import pca_zscore_fit, pca_zscore_transform
 
-SCHEMA_VERSION = 2
-SUPPORTED_LOAD_VERSIONS = {1, 2}
-WHITEN_MODES = ("pca_zscore", "zscore")
+SCHEMA_VERSION = 4
 
 
 def _model_key(family: str, size: str) -> str:
@@ -46,22 +40,13 @@ def _model_key(family: str, size: str) -> str:
 
 @dataclass
 class BazaarFit:
-    """Persisted basket fit: per-model whitener + MCCA projector V.
-
-    `whiten_mode` selects the per-model preprocessing:
-    - `"pca_zscore"` (default): PCA → per-feature z-score. Equal D per model.
-    - `"zscore"`: per-feature z-score only, no PCA. Per-model widths stay
-      at native d_m, so V's row partitioning is uneven. Useful as a PCA
-      ablation; downstream paths that require matching shapes (naive mean,
-      GPA) cannot consume the resulting Z's.
-    """
+    """Persisted basket fit: per-model full-rank whitener + MCCA projector V."""
 
     D: int
     seed: int
     basket: list[tuple[str, str]]
     pca: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)
     mcca_V: np.ndarray | None = None
-    whiten_mode: str = "zscore"
 
     @classmethod
     def fit(
@@ -70,63 +55,31 @@ class BazaarFit:
         basket: list[tuple[str, str]],
         D: int,
         seed: int = 0,
-        whiten_mode: str = "zscore",
     ) -> "BazaarFit":
         """Fit on a dict {model_key: (N, d_m) ndarray}.
 
         `model_key` must be `f"{family}_{size}"` for each (family, size) in
         `basket`. Row order across all entries must match (samples are
-        row-aligned). `whiten_mode` selects the per-model preprocessing.
+        row-aligned).
         """
-        if whiten_mode not in WHITEN_MODES:
-            raise ValueError(
-                f"whiten_mode must be one of {WHITEN_MODES}, got {whiten_mode!r}"
-            )
         keys = [_model_key(f, s) for f, s in basket]
         missing = [k for k in keys if k not in embeddings]
         if missing:
             raise KeyError(f"missing embeddings for {missing}")
 
-        # Per-model PCA caps each model at D_eff = min(D, d_in, N) inside
-        # pca_zscore_fit; models with native width below D thus produce
-        # narrower Zs. MCCA handles heterogeneous per-view widths fine
-        # (it concatenates horizontally, then SVDs to D), so the requested
-        # D is preserved as the latent dim. Downstream paths that need
-        # matching per-model shapes (naive mean, GPA) gate on that.
-        if whiten_mode == "pca_zscore":
-            rank_ceiling = min(
-                min(embeddings[k].shape[0], embeddings[k].shape[1]) for k in keys
-            )
-            if rank_ceiling < D:
-                bottleneck = min(
-                    keys,
-                    key=lambda k: min(embeddings[k].shape[0], embeddings[k].shape[1]),
-                )
-                shape = embeddings[bottleneck].shape
-                warnings.warn(
-                    f"Requested D={D} exceeds PCA rank of some basket members "
-                    f"(narrowest: {bottleneck!r} with shape {shape}). MCCA latent "
-                    f"stays at D={D}; under-rank models contribute their native "
-                    f"d_in columns to the concatenation.",
-                    stacklevel=2,
-                )
-
+        # Per-model PCA goes to native rank min(d_in, N) — full-rank, no
+        # per-model dim reduction. MCCA then concatenates the heterogeneous-
+        # width views and SVDs the result down to the requested latent dim D.
         pca: dict[str, dict[str, np.ndarray]] = {}
         Zs: list[np.ndarray] = []
         for key in keys:
             E = np.asarray(embeddings[key], dtype=np.float32)
-            if whiten_mode == "pca_zscore":
-                Z, art = pca_zscore_fit(E, D=D, seed=seed)
-            else:
-                Z, art = zscore_fit(E)
+            Z, art = pca_zscore_fit(E, D=E.shape[1], seed=seed)
             pca[key] = art
             Zs.append(Z)
 
         V, _ = mcca_fit(Zs, D=D, seed=seed)
-        return cls(
-            D=D, seed=seed, basket=list(basket),
-            pca=pca, mcca_V=V, whiten_mode=whiten_mode,
-        )
+        return cls(D=D, seed=seed, basket=list(basket), pca=pca, mcca_V=V)
 
     def transform(self, embeddings: dict[str, np.ndarray]) -> np.ndarray:
         """Project new (or fit) per-model embeddings into the shared latent."""
@@ -138,10 +91,7 @@ class BazaarFit:
             if key not in embeddings:
                 raise KeyError(f"missing embeddings for {key}")
             E = np.asarray(embeddings[key], dtype=np.float32)
-            if self.whiten_mode == "pca_zscore":
-                Zs.append(pca_zscore_transform(E, self.pca[key]))
-            else:
-                Zs.append(zscore_transform(E, self.pca[key]))
+            Zs.append(pca_zscore_transform(E, self.pca[key]))
         return mcca_transform(Zs, self.mcca_V)
 
     def __call__(self, input, **kwargs) -> np.ndarray:
@@ -166,27 +116,19 @@ class BazaarFit:
             "D": int(self.D),
             "seed": int(self.seed),
             "basket": [list(t) for t in self.basket],
-            "whiten_mode": self.whiten_mode,
         }
         (fit_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
         for fam, size in self.basket:
             key = _model_key(fam, size)
             art = self.pca[key]
-            if self.whiten_mode == "pca_zscore":
-                np.savez(
-                    fit_dir / "pca" / f"{key}.npz",
-                    pca_components=art["pca_components"],
-                    pca_mean=art["pca_mean"],
-                    zscore_mu=art["zscore_mu"],
-                    zscore_sd=art["zscore_sd"],
-                )
-            else:
-                np.savez(
-                    fit_dir / "pca" / f"{key}.npz",
-                    zscore_mu=art["zscore_mu"],
-                    zscore_sd=art["zscore_sd"],
-                )
+            np.savez(
+                fit_dir / "pca" / f"{key}.npz",
+                pca_components=art["pca_components"],
+                pca_mean=art["pca_mean"],
+                zscore_mu=art["zscore_mu"],
+                zscore_sd=art["zscore_sd"],
+            )
 
         if self.mcca_V is None:
             raise RuntimeError("nothing to save: BazaarFit.mcca_V is None")
@@ -196,35 +138,24 @@ class BazaarFit:
     def load(cls, fit_dir: Path | str) -> "BazaarFit":
         fit_dir = Path(fit_dir)
         meta = json.loads((fit_dir / "meta.json").read_text())
-        if meta["schema_version"] not in SUPPORTED_LOAD_VERSIONS:
+        if meta["schema_version"] != SCHEMA_VERSION:
             raise ValueError(
                 f"Unsupported schema_version {meta['schema_version']} "
-                f"(this code supports {sorted(SUPPORTED_LOAD_VERSIONS)})"
+                f"(this code only supports {SCHEMA_VERSION}; "
+                f"older fits used per-model PCA-to-D, regenerate to load)"
             )
         basket = [tuple(t) for t in meta["basket"]]
-        # Pre-`whiten_mode` v1 fits (shipped default included) are pca_zscore.
-        whiten_mode = meta.get("whiten_mode", "pca_zscore")
-        if whiten_mode not in WHITEN_MODES:
-            raise ValueError(
-                f"Unsupported whiten_mode {whiten_mode!r} (expected one of {WHITEN_MODES})"
-            )
 
         pca: dict[str, dict[str, np.ndarray]] = {}
         for fam, size in basket:
             key = _model_key(fam, size)
             with np.load(fit_dir / "pca" / f"{key}.npz") as f:
-                if whiten_mode == "pca_zscore":
-                    pca[key] = {
-                        "pca_components": f["pca_components"],
-                        "pca_mean":       f["pca_mean"],
-                        "zscore_mu":      f["zscore_mu"],
-                        "zscore_sd":      f["zscore_sd"],
-                    }
-                else:
-                    pca[key] = {
-                        "zscore_mu": f["zscore_mu"],
-                        "zscore_sd": f["zscore_sd"],
-                    }
+                pca[key] = {
+                    "pca_components": f["pca_components"],
+                    "pca_mean":       f["pca_mean"],
+                    "zscore_mu":      f["zscore_mu"],
+                    "zscore_sd":      f["zscore_sd"],
+                }
 
         with np.load(fit_dir / "mcca.npz") as f:
             V = f["V"]
@@ -235,5 +166,4 @@ class BazaarFit:
             basket=basket,
             pca=pca,
             mcca_V=V,
-            whiten_mode=whiten_mode,
         )

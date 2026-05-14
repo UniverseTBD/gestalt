@@ -66,8 +66,7 @@ def zscore_fit(E: np.ndarray) -> tuple[np.ndarray, dict[str, np.ndarray]]:
 
     The PCA-free counterpart of `pca_zscore_fit`. Output keeps `E`'s column
     count, so downstream MCCA receives heterogeneous-width per-model views —
-    fine for the SVD but breaks naive-mean and GPA, which assume matching
-    shapes.
+    handled fine by the SVD.
     """
     E32 = E.astype(np.float32, copy=False)
     mu = E32.mean(axis=0, keepdims=True)

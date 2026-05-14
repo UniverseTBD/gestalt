@@ -22,7 +22,7 @@ Pipeline:
   1. Embed all rows through the 22-model basket via `embed_basket`
      (RGB pass-through ingest from `bazaar._ingest.galaxies`).
   2. PCA each model to D, z-score each feature (or skip PCA in zscore mode).
-  3. Build basket sources (naive mean, GPA, MCCA variants, concat→PCA).
+  3. Build basket sources: full-rank whitened MCCA + concat→PCA.
   4. Run `run_probe` for every (target, source, seed).
 
 Output is long-form parquet: one row per (target, source, seed). One run
@@ -44,12 +44,11 @@ from bazaar._ingest.galaxies import (
     stream_image_dr8_ids,
     stream_labels,
 )
-from bazaar.align import generalized_procrustes, mcca_fit
+from bazaar.align import mcca_fit
 from bazaar.basket import BASKET, basket_signature
 from bazaar.bench.probe import run_probe
 from bazaar.embed import embed_basket
-from bazaar.fit import BazaarFit
-from bazaar.whiten import pca_zscore_transform, zscore_fit, zscore_transform
+from bazaar.whiten import pca_zscore_fit, zscore_fit
 
 WHITEN_MODES = ("pca_zscore", "zscore")
 
@@ -116,63 +115,36 @@ def run_galaxies(
     for p, f in valid_fracs.items():
         print(f"  {p:14s} {f:.3f}")
 
-    # Compute a fit once on the basket, then derive per-model whitened tensors.
-    fit = BazaarFit.fit(embeddings, basket=basket, D=D, seed=0, whiten_mode=whiten_mode)
     model_names = [f"{f}_{s}" for f, s in basket]
+    # Per-model features for the single-model probes. Independent of the basket
+    # source: pca_zscore reduces to D per model, zscore keeps native widths.
     if whiten_mode == "pca_zscore":
         Z_by_model = {
-            name: pca_zscore_transform(embeddings[name], fit.pca[name])
+            name: pca_zscore_fit(embeddings[name], D=D, seed=0)[0]
             for name in model_names
         }
         single_tag = f"pca{D}"
     else:
         Z_by_model = {
-            name: zscore_transform(embeddings[name], fit.pca[name])
+            name: zscore_fit(embeddings[name])[0]
             for name in model_names
         }
         single_tag = "zscore"
     Zs = [Z_by_model[name] for name in model_names]
 
     basket_sources: list[tuple[str, np.ndarray]] = []
-    widths = [Z.shape[1] for Z in Zs]
-    homogeneous = len(set(widths)) == 1
-    if whiten_mode == "pca_zscore" and homogeneous:
-        stack = np.stack(Zs, axis=0)
-        basket_sources.append(("basket_mean", stack.mean(axis=0)))
-        del stack
-        print(f"[bazaar.galaxies] running GPA on {len(Zs)} models (D={D})...")
-        _, B_proc, gpa_info = generalized_procrustes(
-            Zs, max_iter=50, tol=1e-6, verbose=True,
-        )
-        print(f"[bazaar.galaxies] GPA converged in {gpa_info['iterations']} iters, "
-              f"final mean-Frob² = {gpa_info['loss']:.4e}")
-        basket_sources.append(("basket_procrustes_mean", B_proc))
-    else:
-        reason = ("zscore mode (native widths)" if whiten_mode == "zscore"
-                  else f"D={D} exceeds some model's PCA rank")
-        print(f"[bazaar.galaxies] {reason}, per-model widths={widths} "
-              f"(skipping naive-mean and GPA — heterogeneous shapes)")
-
-    print(f"[bazaar.galaxies] applying MCCA fit to {len(Zs)} models (D={D})...")
-    B_mcca = fit.transform(embeddings)
-    basket_sources.append(("basket_mcca_mean", B_mcca))
-    print(f"[bazaar.galaxies] MCCA shared latent shape={B_mcca.shape}")
-
-    alphas = [1.0 / np.sqrt(Z.shape[1]) for Z in Zs]
-    Zs_eqmass = [alpha * Z for alpha, Z in zip(alphas, Zs)]
-    print(f"[bazaar.galaxies] running mass-balanced MCCA (1/sqrt(d_eff)) D={D}...")
-    _, B_mcca_eqmass = mcca_fit(Zs_eqmass, D=D, seed=0)
-    basket_sources.append(("basket_mcca_eqmass", B_mcca_eqmass))
-    del Zs_eqmass
-    gc.collect()
 
     raw_widths = [embeddings[name].shape[1] for name in model_names]
-    print(f"[bazaar.galaxies] zscore-only MCCA (native widths={raw_widths}, "
-          f"sum={sum(raw_widths)}) D={D}...")
-    Zs_zscore = [zscore_fit(embeddings[name])[0] for name in model_names]
-    _, B_mcca_zscore = mcca_fit(Zs_zscore, D=D, seed=0)
-    basket_sources.append(("basket_mcca_zscore", B_mcca_zscore))
-    del Zs_zscore
+    print(f"[bazaar.galaxies] full-rank whitened MCCA on {len(model_names)} models "
+          f"(per-model native widths={raw_widths}, sum={sum(raw_widths)}, D={D})...")
+    Zs_white = [
+        pca_zscore_fit(embeddings[name], D=embeddings[name].shape[1])[0]
+        for name in model_names
+    ]
+    _, B_mcca_whitened = mcca_fit(Zs_white, D=D, seed=0)
+    basket_sources.append(("basket_mcca_whitened", B_mcca_whitened))
+    print(f"[bazaar.galaxies] full-rank whitened MCCA shared latent shape={B_mcca_whitened.shape}")
+    del Zs_white
     gc.collect()
 
     print(f"[bazaar.galaxies] concat→PCA-to-{D} ablation on "
@@ -193,9 +165,7 @@ def run_galaxies(
         n_valid = int(np.isfinite(y).sum())
         if n_valid < test_size + 100:
             # `train_test_split` will trip if the valid pool is smaller than
-            # `test_size`; rather than crash mid-sweep we shrink the holdout
-            # proportionally and note it. The MPA-JHU sSFR target is the
-            # typical offender — its valid mask is ~20% of the test split.
+            # `test_size`; shrink the holdout proportionally for sparse targets.
             eff_test = max(50, n_valid // 5)
             print(f"[bazaar.galaxies]   {prop}: only {n_valid} valid rows; "
                   f"shrinking test_size {test_size}→{eff_test}")
@@ -228,13 +198,7 @@ def run_galaxies(
                     if r["property"] == prop and r["source"] == src]
 
         parts = [f"  {prop:13s}"]
-        if whiten_mode == "pca_zscore" and homogeneous:
-            bn = _pick("basket_mean")
-            bp = _pick("basket_procrustes_mean")
-            parts.append(f"naive={np.mean(bn):.4f}±{np.std(bn):.4f}")
-            parts.append(f"proc={np.mean(bp):.4f}±{np.std(bp):.4f}")
-        for src in ("basket_mcca_mean", "basket_mcca_eqmass",
-                    "basket_mcca_zscore", "basket_concat_pca"):
+        for src in ("basket_mcca_whitened", "basket_concat_pca"):
             vals = _pick(src)
             tag = src.replace("basket_", "")
             parts.append(f"{tag}={np.mean(vals):.4f}±{np.std(vals):.4f}")

@@ -16,7 +16,7 @@ import polars as pl
 
 from bazaar import api
 from bazaar.basket import BASKET, ensure_embeddings_downloaded
-from bazaar.bench.pipeline import catalog_pass, run_modality
+from bazaar.bench.cosmosweb import catalog_pass, run_cosmosweb
 from bazaar.bench.plotting import render_plots
 from bazaar.fit import BazaarFit
 
@@ -43,7 +43,6 @@ def cmd_fit(args: argparse.Namespace) -> int:
         args.input,
         D=args.D,
         seed=args.seed,
-        whiten_mode=args.whiten,
         split=args.split,
         max_samples=args.max_samples,
         modality=args.modality,
@@ -60,7 +59,6 @@ def cmd_load(args: argparse.Namespace) -> int:
         "fit_dir": str(args.fit_dir),
         "D": fit.D,
         "seed": fit.seed,
-        "whiten_mode": fit.whiten_mode,
         "basket_len": len(fit.basket),
         "basket": [list(t) for t in fit.basket],
         "V_shape": list(fit.mcca_V.shape) if fit.mcca_V is not None else None,
@@ -77,7 +75,6 @@ def _add_bench_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--D", type=int, default=256, help="PCA components per model")
     p.add_argument("--n-seeds", type=int, default=10)
     p.add_argument("--test-size", type=int, default=5000)
-    p.add_argument("--telescopes", nargs="+", default=["hsc", "jwst"])
     p.add_argument("--n-use", type=int, default=45_000)
     p.add_argument("--out", type=Path, required=True,
                    help="Output parquet path")
@@ -90,20 +87,21 @@ def _add_bench_args(p: argparse.ArgumentParser) -> None:
                    help="Path to the embedding downloader script")
     p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
                    help="Per-model whitener before MCCA. 'zscore' is a PCA "
-                        "ablation; naive-mean and GPA are skipped in that mode.")
+                        "ablation that skips per-model dim reduction.")
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
     args.emb_dir.mkdir(parents=True, exist_ok=True)
-    ensure_embeddings_downloaded(BASKET, args.telescopes, args.emb_dir,
+    telescopes = ["hsc", "jwst"]
+    ensure_embeddings_downloaded(BASKET, telescopes, args.emb_dir,
                                  args.stream_script)
     params = catalog_pass(args.n_use)
     print({k: (v.shape, float(np.isfinite(v).mean()))
            for k, v in params.items()})
 
     all_rows: list[dict] = []
-    for tele in args.telescopes:
-        all_rows.extend(run_modality(
+    for tele in telescopes:
+        all_rows.extend(run_cosmosweb(
             tele, params, BASKET,
             D=args.D, n_seeds=args.n_seeds,
             n_use=args.n_use, test_size=args.test_size,
@@ -215,8 +213,6 @@ def main(argv: list[str] | None = None) -> int:
     _add_run_fit_shared(fit_p)
     fit_p.add_argument("--D", type=int, default=1024)
     fit_p.add_argument("--seed", type=int, default=0)
-    fit_p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="zscore",
-                       help="Per-model whitener (default: zscore = straight MCCA)")
     fit_p.add_argument("--out", type=Path, required=True,
                        help="Output directory for the saved fit")
     fit_p.set_defaults(func=cmd_fit)

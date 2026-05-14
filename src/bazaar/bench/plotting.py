@@ -16,14 +16,10 @@ PROPERTIES = ["redshift", "mass", "sSFR"]
 PROPERTY_LABELS = {"redshift": "z", "mass": r"$\log M_\star$", "sSFR": "sSFR"}
 MODALITIES = ["hsc", "jwst"]
 
-BASKET_SOURCES = (
-    "basket_mean", "basket_procrustes_mean", "basket_mcca_mean", "basket_concat_pca",
-)
+BASKET_SOURCES = ("basket_mcca_whitened", "basket_concat_pca")
 BASKET_STYLE = {
-    "basket_mean":             dict(color="#d62728", label="naive mean"),
-    "basket_procrustes_mean":  dict(color="#9467bd", label="Procrustes-aligned mean"),
-    "basket_mcca_mean":        dict(color="#ff7f0e", label="MCCA shared latent"),
-    "basket_concat_pca":       dict(color="#17becf", label="concat → PCA-to-D"),
+    "basket_mcca_whitened":  dict(color="#ff7f0e", label="MCCA (full-rank whitened)"),
+    "basket_concat_pca":     dict(color="#17becf", label="concat → PCA-to-D"),
 }
 
 
@@ -62,9 +58,12 @@ def plot_one_panel(ax, single_pca: dict, baskets: dict, title: str):
                    label=f"{style['label']} = {bm:.3f} ± {bs_:.3f}")
 
     best_idx = int(np.argmax(means))
+    median_val = float(np.median(means))
     ax.scatter([best_idx], [means[best_idx]], color="#2ca02c", s=80, marker="*",
                zorder=5,
                label=f"best single = {means[best_idx]:.3f} ({names_sorted[best_idx]})")
+    ax.axhline(median_val, color="#7f7f7f", lw=1.0, ls="--",
+               label=f"median single = {median_val:.3f}")
 
     ax.set_xticks(x)
     ax.set_xticklabels(names_sorted, rotation=75, ha="right", fontsize=6)
@@ -80,10 +79,10 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
 
     stats_lines = [
         f"{'modality':<6}{'property':<10}"
-        f"{'naive_mean':>16}{'procrustes_mean':>22}{'mcca_mean':>22}{'concat_pca':>22}"
-        f"{'best_single':>22}"
-        f"{'rank_naive':>12}{'rank_proc':>12}{'rank_mcca':>12}{'rank_concat':>12}"
-        f"{'p_naive':>12}{'p_proc':>12}{'p_mcca':>12}{'p_concat':>12}"
+        f"{'mcca_whitened':>22}{'concat_pca':>22}"
+        f"{'best_single':>22}{'median_single':>16}"
+        f"{'rank_white':>12}{'rank_concat':>12}"
+        f"{'p_white':>12}{'p_concat':>12}"
     ]
 
     pdf_path = figs_dir / f"basket_vs_singles{suffix}.pdf"
@@ -94,6 +93,7 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
                 means = {n: arr.mean() for n, arr in singles.items()}
                 best_name = max(means, key=means.get)
                 best_arr = singles[best_name]
+                median_single = float(np.median(list(means.values())))
 
                 def _rank_p(b: np.ndarray) -> tuple[int, float]:
                     rank = sum(1 for v in means.values() if v > b.mean()) + 1
@@ -104,13 +104,9 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
                         p = float("nan")
                     return rank, p
 
-                naive = baskets.get("basket_mean")
-                proc = baskets.get("basket_procrustes_mean")
-                mcca = baskets.get("basket_mcca_mean")
+                whitened = baskets.get("basket_mcca_whitened")
                 concat = baskets.get("basket_concat_pca")
-                rank_n, p_n = _rank_p(naive) if naive is not None else (-1, float("nan"))
-                rank_p, p_p = _rank_p(proc) if proc is not None else (-1, float("nan"))
-                rank_m, p_m = _rank_p(mcca) if mcca is not None else (-1, float("nan"))
+                rank_w, p_w = _rank_p(whitened) if whitened is not None else (-1, float("nan"))
                 rank_c, p_c = _rank_p(concat) if concat is not None else (-1, float("nan"))
 
                 def _fmt(arr):
@@ -120,13 +116,12 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
 
                 stats_lines.append(
                     f"{modality:<6}{prop:<10}"
-                    f"{_fmt(naive)}{_fmt(proc)}{_fmt(mcca)}{_fmt(concat)}"
+                    f"{_fmt(whitened)}{_fmt(concat)}"
                     f"{means[best_name]:>14.3f} ({best_name[:8]:<8}) "
-                    f"{rank_n:>4d}/{len(singles)+1}  "
-                    f"{rank_p:>4d}/{len(singles)+1}  "
-                    f"{rank_m:>4d}/{len(singles)+1}  "
+                    f"{median_single:>14.3f}  "
+                    f"{rank_w:>4d}/{len(singles)+1}  "
                     f"{rank_c:>4d}/{len(singles)+1}  "
-                    f"{p_n:>10.3g}  {p_p:>10.3g}  {p_m:>10.3g}  {p_c:>10.3g}"
+                    f"{p_w:>10.3g}  {p_c:>10.3g}"
                 )
 
                 fig, ax = plt.subplots(figsize=(12, 5.5))
@@ -134,9 +129,7 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
                     ax, singles, baskets,
                     title=(f"{modality.upper()} — {PROPERTY_LABELS[prop]}: "
                            f"basket vs single models "
-                           f"(naive {rank_n}/{len(singles)+1}, "
-                           f"procrustes {rank_p}/{len(singles)+1}, "
-                           f"mcca {rank_m}/{len(singles)+1}, "
+                           f"(mcca-whitened {rank_w}/{len(singles)+1}, "
                            f"concat-pca {rank_c}/{len(singles)+1})"),
                 )
                 ax.legend(loc="lower right", fontsize=7)
@@ -155,7 +148,7 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
             )
             if i == 0 and j == 0:
                 axes[i, j].legend(loc="lower right", fontsize=6)
-    fig.suptitle("Basket-mean (naive, Procrustes-aligned, MCCA, concat→PCA) "
+    fig.suptitle("Basket-mean (MCCA full-rank whitened, concat→PCA) "
                  "vs single-model $R^2$ — 45 000 COSMOS-Web galaxies",
                  fontsize=13)
     fig.tight_layout()

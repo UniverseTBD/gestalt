@@ -72,7 +72,6 @@ def fit(
     *,
     D: int = 1024,
     seed: int = 0,
-    whiten_mode: str = "zscore",
     split: str = "train",
     max_samples: int | None = None,
     modality: str | None = None,
@@ -92,18 +91,15 @@ def fit(
     embeddings = embed_basket(
         source, basket=BASKET, cache_dir=cache_dir, batch_size=batch_size,
     )
-    print(f"[bazaar.fit] Fitting BazaarFit(D={D}, whiten={whiten_mode}) on "
+    print(f"[bazaar.fit] Fitting BazaarFit(D={D}) on "
           f"{len(BASKET)} models × {next(iter(embeddings.values())).shape[0]} rows "
           f"(modality={source.modality})...")
-    fit_obj = BazaarFit.fit(
-        embeddings, basket=BASKET, D=D, seed=seed, whiten_mode=whiten_mode,
-    )
+    fit_obj = BazaarFit.fit(embeddings, basket=BASKET, D=D, seed=seed)
     if out is not None:
         out = Path(out)
         out.mkdir(parents=True, exist_ok=True)
         fit_obj.save(out)
-        print(f"[bazaar.fit] Wrote fit → {out}/  "
-              f"(V={fit_obj.mcca_V.shape}, whiten={fit_obj.whiten_mode})")
+        print(f"[bazaar.fit] Wrote fit → {out}/  (V={fit_obj.mcca_V.shape})")
     return fit_obj
 
 
