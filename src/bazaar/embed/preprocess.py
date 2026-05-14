@@ -17,6 +17,7 @@ from importlib.resources import files
 import numpy as np
 import torch
 from astropt.local_datasets import GalaxyImageDataset
+from scipy.ndimage import zoom
 from torchvision import transforms
 
 from bazaar.embed.zoom import resize_galaxy_to_fit
@@ -170,6 +171,26 @@ def flux_to_pil(blob, mode, modes, resize=True, norm_mode="arcsinh", resize_mode
                "linear" — linear percentile clip (old default)
                "per_image" — per-image arcsinh (no global percentiles)
     """
+    # Pre-rendered RGB short-circuit (e.g. galaxy-zoo-10 PNGs). The flux→RGB
+    # path assumes raw flux arrays; gz10 ships already-stretched display PNGs,
+    # so re-arcsinh-stretching them would crush the dynamic range. We resize
+    # to 96×96 to match the legacysurvey path's intermediate canvas and keep
+    # the channels in RGB order (no BGR flip — the flux pipelines flip [g,r,z]
+    # → [z,r,g] to produce display RGB; gz10 is already in that order).
+    if isinstance(blob, dict) and "rendered" in blob:
+        arr = np.asarray(blob["rendered"], dtype=np.uint8)
+        if arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        if arr.ndim != 3 or arr.shape[-1] != 3:
+            raise ValueError(
+                f"'rendered' blob must be (H, W) or (H, W, 3); got shape {arr.shape}"
+            )
+        if resize and arr.shape[:2] != (96, 96):
+            zh = 96 / arr.shape[0]
+            zw = 96 / arr.shape[1]
+            arr = zoom(arr.astype(np.float32), (zh, zw, 1), order=1)
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+        return arr
 
     def _norm(chan, percentiles=None, mode="arcsinh"):
         if percentiles is not None:

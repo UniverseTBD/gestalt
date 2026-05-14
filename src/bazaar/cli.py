@@ -127,6 +127,57 @@ def cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench_gz10(args: argparse.Namespace) -> int:
+    from bazaar.bench.gz10 import run_gz10  # local: heavy imports (datasets, torch)
+
+    rows = run_gz10(
+        BASKET,
+        D=args.D,
+        n_seeds=args.n_seeds,
+        test_size=args.test_size,
+        split=args.split,
+        max_samples=args.max_samples,
+        cache_dir=args.cache_dir,
+        batch_size=args.batch_size,
+        whiten_mode=args.whiten,
+    )
+    df = (
+        pl.DataFrame(rows)
+        .with_columns(pl.lit(args.D).alias("D"))
+        .with_columns(pl.lit(args.whiten).alias("whiten_mode"))
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.gz10] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
+def cmd_bench_galaxies(args: argparse.Namespace) -> int:
+    from bazaar.bench.galaxies import run_galaxies  # local: heavy imports
+
+    rows = run_galaxies(
+        BASKET,
+        D=args.D,
+        n_seeds=args.n_seeds,
+        test_size=args.test_size,
+        split=args.split,
+        max_samples=args.max_samples,
+        cache_dir=args.cache_dir,
+        batch_size=args.batch_size,
+        whiten_mode=args.whiten,
+    )
+    df = (
+        pl.DataFrame(rows)
+        .with_columns(pl.lit(args.D).alias("D"))
+        .with_columns(pl.lit(args.whiten).alias("whiten_mode"))
+        .with_columns(pl.lit(args.split).alias("split"))
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.galaxies] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # argparse wiring
 # ---------------------------------------------------------------------------
@@ -187,6 +238,52 @@ def main(argv: list[str] | None = None) -> int:
     plot_p.add_argument("--suffix", type=str, default="")
     plot_p.add_argument("--figs-dir", type=Path, default=Path("figs"))
     plot_p.set_defaults(func=cmd_plot)
+
+    gz10_p = sub.add_parser(
+        "bench-gz10",
+        help="Benchmark sweep on UniverseTBD/mmu_gz10 "
+             "(classification on gz10_label + regression on redshift)",
+    )
+    gz10_p.add_argument("--D", type=int, default=256, help="PCA components per model")
+    gz10_p.add_argument("--n-seeds", type=int, default=5)
+    gz10_p.add_argument("--test-size", type=int, default=2_500)
+    gz10_p.add_argument("--split", default="train")
+    gz10_p.add_argument("--max-samples", type=int, default=None,
+                        help="Cap on rows ingested (default: full split)")
+    gz10_p.add_argument("--cache-dir", type=Path, default=None,
+                        help="Per-model .npy embedding cache "
+                             "(default: ~/.cache/bazaar/embeds)")
+    gz10_p.add_argument("--batch-size", type=int, default=64)
+    gz10_p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
+                        help="Per-model whitener before MCCA. 'zscore' is a PCA ablation.")
+    gz10_p.add_argument("--out", type=Path, required=True,
+                        help="Output parquet path")
+    gz10_p.set_defaults(func=cmd_bench_gz10)
+
+    galaxies_p = sub.add_parser(
+        "bench-galaxies",
+        help="Benchmark sweep on Smith42/galaxies (revision v2.0) "
+             "— 13 paper-faithful regression targets from Sanjaripour+2026",
+    )
+    galaxies_p.add_argument("--D", type=int, default=256, help="PCA components per model")
+    galaxies_p.add_argument("--n-seeds", type=int, default=5)
+    galaxies_p.add_argument("--test-size", type=int, default=5_000)
+    galaxies_p.add_argument("--split", default="test",
+                            help="Default is the 86k test split; pass 'train' for "
+                                 "the full 8.5M (very large embedding cache).")
+    galaxies_p.add_argument("--max-samples", type=int, default=None,
+                            help="Cap on rows ingested (default: full split)")
+    galaxies_p.add_argument("--cache-dir", type=Path, default=None,
+                            help="Per-model .npy embedding cache "
+                                 "(default: ~/.cache/bazaar/embeds)")
+    galaxies_p.add_argument("--batch-size", type=int, default=64)
+    galaxies_p.add_argument("--whiten", choices=["pca_zscore", "zscore"],
+                            default="pca_zscore",
+                            help="Per-model whitener before MCCA. 'zscore' is a "
+                                 "PCA ablation.")
+    galaxies_p.add_argument("--out", type=Path, required=True,
+                            help="Output parquet path")
+    galaxies_p.set_defaults(func=cmd_bench_galaxies)
 
     args = ap.parse_args(argv)
     return args.func(args)
