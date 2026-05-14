@@ -17,6 +17,7 @@ import numpy as np
 import torch
 from datasets import IterableDataset
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from bazaar._ingest import CatalogSource
 from bazaar.basket import BASKET, MODEL_REGISTRY, basket_signature
@@ -119,9 +120,12 @@ def embed_basket(
                 ds = ds.with_format("torch")
             dl = DataLoader(ds, batch_size=batch_size, num_workers=num_workers)
 
+            n_batches = (n_rows + batch_size - 1) // batch_size
             zs: list[torch.Tensor] = []
             with torch.no_grad():
-                for batch in dl:
+                for batch in tqdm(
+                    dl, total=n_batches, desc=f"embed {family}_{size}", unit="batch",
+                ):
                     zs.append(adapter.embed_for_mode(batch, source.modality).cpu())
             Z = torch.cat(zs).numpy().astype(np.float32)
             out_path = npy_path(root, family, size)

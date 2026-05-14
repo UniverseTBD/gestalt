@@ -53,7 +53,7 @@ The fit stores the whitening artifacts and the right-singular-vector matrix
 `V = (Vᵀ)ᵀ ∈ R^{MD×D}`, so new data projects as `C_new @ V` without
 refitting.
 
-The evaluation benchmark (`bazaar bench`) additionally compares against
+The evaluation benchmark (`bazaar bench cosmos`) additionally compares against
 two alignment baselines that require equal-width views (`pca_zscore` mode):
 
 1. **Naive mean** — elementwise mean across the 22 z-scored PCAs (catastrophic
@@ -141,13 +141,16 @@ Both `run` and `fit` accept:
 
 ## Evaluation harness
 
-The benchmark that produced the published results lives behind `bazaar bench`
-(kept for reproducibility; requires pre-cached `.npy` embeddings):
+The benchmark that produced the published results lives behind `bazaar bench cosmos`
+(kept for reproducibility; requires pre-cached `.npy` embeddings). Sibling
+sweeps `bazaar bench gz10` and `bazaar bench galaxies` cover the GZ10
+classification + redshift task and the 13 Sanjaripour+2026 regression
+targets on Smith42/galaxies respectively:
 
 ```bash
-bazaar bench --D 256 --out data/results_pca256.parquet \
-             --emb-dir data/embeddings
-bazaar plot  --data data/results_pca256.parquet --suffix _pca256
+bazaar bench cosmos --D 256 --out data/results_pca256.parquet \
+                    --emb-dir data/embeddings
+bazaar plot         --data data/results_pca256.parquet --suffix _pca256
 ```
 
 This writes a 1 500-row long-form parquet (modality × property × seed ×

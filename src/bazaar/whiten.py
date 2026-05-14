@@ -55,12 +55,6 @@ def pca_zscore_transform(E: np.ndarray, artifacts: dict[str, np.ndarray]) -> np.
     return ((Z - artifacts["zscore_mu"]) / artifacts["zscore_sd"]).astype(np.float32)
 
 
-def pca_and_zscore(E: np.ndarray, D: int, seed: int = 0) -> np.ndarray:
-    """Back-compat: PCA on full E (randomized SVD), then per-feature z-score."""
-    Z, _ = pca_zscore_fit(E, D=D, seed=seed)
-    return Z
-
-
 def zscore_fit(E: np.ndarray) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Fit per-feature z-score on raw embeddings (no PCA, no dim reduction).
 

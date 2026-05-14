@@ -1,9 +1,10 @@
-"""Bazaar CLI: three user verbs (run / fit / load) + a hidden bench verb.
+"""Bazaar CLI: three user verbs (run / fit / load), a plot verb, and a bench verb.
 
-- `bazaar run  <input>`  — embed + transform via shipped or supplied fit
-- `bazaar fit  <input>`  — embed + fit a fresh BazaarFit
-- `bazaar load <fit_dir>`— inspect a saved fit
-- `bazaar bench …`       — the legacy benchmark sweep (kept for reproducibility)
+- `bazaar run   <input>`            — embed + transform via shipped or supplied fit
+- `bazaar fit   <input>`            — embed + fit a fresh BazaarFit
+- `bazaar load  <fit_dir>`          — inspect a saved fit
+- `bazaar bench {cosmos,gz10,galaxies} ...` — the dataset benchmark sweeps
+- `bazaar plot  --data <parquet>`   — render plots from a bench parquet
 """
 from __future__ import annotations
 
@@ -68,10 +69,10 @@ def cmd_load(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Hidden bench verb (legacy benchmark sweep)
+# Bench verb: `bazaar bench {cosmos,gz10,galaxies}`
 # ---------------------------------------------------------------------------
 
-def _add_bench_args(p: argparse.ArgumentParser) -> None:
+def _add_cosmos_bench_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--D", type=int, default=256, help="PCA components per model")
     p.add_argument("--n-seeds", type=int, default=10)
     p.add_argument("--test-size", type=int, default=5000)
@@ -90,7 +91,31 @@ def _add_bench_args(p: argparse.ArgumentParser) -> None:
                         "ablation that skips per-model dim reduction.")
 
 
-def cmd_bench(args: argparse.Namespace) -> int:
+def _add_dataset_bench_args(
+    p: argparse.ArgumentParser,
+    *,
+    default_n_seeds: int,
+    default_test_size: int,
+    default_split: str,
+    split_help: str = "Default split for this dataset.",
+) -> None:
+    """Shared argparse block for `bench gz10` and `bench galaxies`."""
+    p.add_argument("--D", type=int, default=256, help="PCA components per model")
+    p.add_argument("--n-seeds", type=int, default=default_n_seeds)
+    p.add_argument("--test-size", type=int, default=default_test_size)
+    p.add_argument("--split", default=default_split, help=split_help)
+    p.add_argument("--max-samples", type=int, default=None,
+                   help="Cap on rows ingested (default: full split)")
+    p.add_argument("--cache-dir", type=Path, default=None,
+                   help="Per-model .npy embedding cache "
+                        "(default: ~/.cache/bazaar/embeds)")
+    p.add_argument("--batch-size", type=int, default=64)
+    p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
+                   help="Per-model whitener before MCCA. 'zscore' is a PCA ablation.")
+    p.add_argument("--out", type=Path, required=True, help="Output parquet path")
+
+
+def cmd_bench_cosmos(args: argparse.Namespace) -> int:
     args.emb_dir.mkdir(parents=True, exist_ok=True)
     telescopes = ["hsc", "jwst"]
     ensure_embeddings_downloaded(BASKET, telescopes, args.emb_dir,
@@ -222,64 +247,42 @@ def main(argv: list[str] | None = None) -> int:
     load_p.add_argument("fit_dir", type=Path)
     load_p.set_defaults(func=cmd_load)
 
-    # Hidden / legacy verbs (still discoverable via --help)
-    bench_p = sub.add_parser("bench",
-                             help="(legacy) the benchmark sweep that produced "
-                                  "the published numbers")
-    _add_bench_args(bench_p)
-    bench_p.set_defaults(func=cmd_bench)
+    bench_p = sub.add_parser("bench", help="benchmark sweeps")
+    bench_sub = bench_p.add_subparsers(dest="dataset", required=True)
 
-    plot_p = sub.add_parser("plot", help="(legacy) render plots + stats from bench parquet")
+    cosmos_p = bench_sub.add_parser(
+        "cosmos",
+        help="COSMOS-Web HSC×JWST sweep (Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2)",
+    )
+    _add_cosmos_bench_args(cosmos_p)
+    cosmos_p.set_defaults(func=cmd_bench_cosmos)
+
+    gz10_p = bench_sub.add_parser(
+        "gz10",
+        help="UniverseTBD/mmu_gz10 sweep "
+             "(classification on gz10_label + regression on redshift)",
+    )
+    _add_dataset_bench_args(
+        gz10_p, default_n_seeds=5, default_test_size=2_500, default_split="train",
+    )
+    gz10_p.set_defaults(func=cmd_bench_gz10)
+
+    galaxies_p = bench_sub.add_parser(
+        "galaxies",
+        help="Smith42/galaxies (v2.0) sweep "
+             "— 13 paper-faithful regression targets from Sanjaripour+2026",
+    )
+    _add_dataset_bench_args(
+        galaxies_p, default_n_seeds=5, default_test_size=5_000, default_split="test",
+        split_help="Default is the 86k test split; pass 'train' for the full 8.5M.",
+    )
+    galaxies_p.set_defaults(func=cmd_bench_galaxies)
+
+    plot_p = sub.add_parser("plot", help="Render plots + stats from a bench parquet")
     plot_p.add_argument("--data", type=Path, required=True)
     plot_p.add_argument("--suffix", type=str, default="")
     plot_p.add_argument("--figs-dir", type=Path, default=Path("figs"))
     plot_p.set_defaults(func=cmd_plot)
-
-    gz10_p = sub.add_parser(
-        "bench-gz10",
-        help="Benchmark sweep on UniverseTBD/mmu_gz10 "
-             "(classification on gz10_label + regression on redshift)",
-    )
-    gz10_p.add_argument("--D", type=int, default=256, help="PCA components per model")
-    gz10_p.add_argument("--n-seeds", type=int, default=5)
-    gz10_p.add_argument("--test-size", type=int, default=2_500)
-    gz10_p.add_argument("--split", default="train")
-    gz10_p.add_argument("--max-samples", type=int, default=None,
-                        help="Cap on rows ingested (default: full split)")
-    gz10_p.add_argument("--cache-dir", type=Path, default=None,
-                        help="Per-model .npy embedding cache "
-                             "(default: ~/.cache/bazaar/embeds)")
-    gz10_p.add_argument("--batch-size", type=int, default=64)
-    gz10_p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
-                        help="Per-model whitener before MCCA. 'zscore' is a PCA ablation.")
-    gz10_p.add_argument("--out", type=Path, required=True,
-                        help="Output parquet path")
-    gz10_p.set_defaults(func=cmd_bench_gz10)
-
-    galaxies_p = sub.add_parser(
-        "bench-galaxies",
-        help="Benchmark sweep on Smith42/galaxies (revision v2.0) "
-             "— 13 paper-faithful regression targets from Sanjaripour+2026",
-    )
-    galaxies_p.add_argument("--D", type=int, default=256, help="PCA components per model")
-    galaxies_p.add_argument("--n-seeds", type=int, default=5)
-    galaxies_p.add_argument("--test-size", type=int, default=5_000)
-    galaxies_p.add_argument("--split", default="test",
-                            help="Default is the 86k test split; pass 'train' for "
-                                 "the full 8.5M (very large embedding cache).")
-    galaxies_p.add_argument("--max-samples", type=int, default=None,
-                            help="Cap on rows ingested (default: full split)")
-    galaxies_p.add_argument("--cache-dir", type=Path, default=None,
-                            help="Per-model .npy embedding cache "
-                                 "(default: ~/.cache/bazaar/embeds)")
-    galaxies_p.add_argument("--batch-size", type=int, default=64)
-    galaxies_p.add_argument("--whiten", choices=["pca_zscore", "zscore"],
-                            default="pca_zscore",
-                            help="Per-model whitener before MCCA. 'zscore' is a "
-                                 "PCA ablation.")
-    galaxies_p.add_argument("--out", type=Path, required=True,
-                            help="Output parquet path")
-    galaxies_p.set_defaults(func=cmd_bench_galaxies)
 
     args = ap.parse_args(argv)
     return args.func(args)

@@ -94,8 +94,10 @@ def test_probe_one_dispatches_on_kind():
     y_reg = X[:, 0].astype(np.float32)
     cls_metrics = _probe_one(X, y_cls, "classification", test_size=100, seed=0)
     reg_metrics = _probe_one(X, y_reg, "regression", test_size=100, seed=0)
-    assert set(cls_metrics.keys()) == {"acc", "f1"}
-    assert set(reg_metrics.keys()) == {"r2"}
+    assert set(cls_metrics.keys()) == {"r2", "acc", "f1"}
+    assert set(reg_metrics.keys()) == {"r2", "acc", "f1"}
+    assert np.isnan(cls_metrics["r2"])
+    assert np.isnan(reg_metrics["acc"]) and np.isnan(reg_metrics["f1"])
     assert reg_metrics["r2"] > 0.9
 
 
