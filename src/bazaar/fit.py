@@ -21,6 +21,7 @@ row partitioning is unambiguous when loading.
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -85,6 +86,30 @@ class BazaarFit:
         missing = [k for k in keys if k not in embeddings]
         if missing:
             raise KeyError(f"missing embeddings for {missing}")
+
+        # Per-model PCA caps each model at D_eff = min(D, d_in, N) inside
+        # pca_zscore_fit; models with native width below D thus produce
+        # narrower Zs. MCCA handles heterogeneous per-view widths fine
+        # (it concatenates horizontally, then SVDs to D), so the requested
+        # D is preserved as the latent dim. Downstream paths that need
+        # matching per-model shapes (naive mean, GPA) gate on that.
+        if whiten_mode == "pca_zscore":
+            rank_ceiling = min(
+                min(embeddings[k].shape[0], embeddings[k].shape[1]) for k in keys
+            )
+            if rank_ceiling < D:
+                bottleneck = min(
+                    keys,
+                    key=lambda k: min(embeddings[k].shape[0], embeddings[k].shape[1]),
+                )
+                shape = embeddings[bottleneck].shape
+                warnings.warn(
+                    f"Requested D={D} exceeds PCA rank of some basket members "
+                    f"(narrowest: {bottleneck!r} with shape {shape}). MCCA latent "
+                    f"stays at D={D}; under-rank models contribute their native "
+                    f"d_in columns to the concatenation.",
+                    stacklevel=2,
+                )
 
         pca: dict[str, dict[str, np.ndarray]] = {}
         Zs: list[np.ndarray] = []
