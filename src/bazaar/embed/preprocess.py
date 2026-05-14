@@ -6,44 +6,31 @@ expected by the foundation-model adapters in `bazaar.embed.models`.
 
 Differences from upstream:
 - `PreprocessSAM2` removed (no SAM2 in the bazaar basket)
-- `_PERCENTILES_PATH` resolved via `importlib.resources` so the JSON ships
-  inside the wheel and can be loaded without a `data/` working-directory.
+- Per-modality flux→RGB logic lives in `bazaar.modalities`; this module is the
+  generic dispatcher + the two outer Preprocess classes that the basket uses.
 """
-import json
-import os
 from functools import partial
-from importlib.resources import files
 
-import numpy as np
 import torch
 from astropt.local_datasets import GalaxyImageDataset
-from scipy.ndimage import zoom
 from torchvision import transforms
 
-from bazaar.embed.zoom import resize_galaxy_to_fit
-
-_percentiles_cache = None
+from bazaar.modalities import MODALITIES, get_modality
 
 
-def _percentiles_path():
-    override = os.environ.get("PU_PERCENTILES_PATH") or os.environ.get(
-        "BAZAAR_PERCENTILES_PATH"
-    )
-    if override:
-        return override
-    return files("bazaar.embed").joinpath("data/percentiles.json")
-
-
-def _load_percentiles():
-    """Load percentiles from JSON, with caching."""
-    global _percentiles_cache
-    if _percentiles_cache is not None:
-        return _percentiles_cache
-
-    path = _percentiles_path()
-    with open(path) as f:
-        _percentiles_cache = json.load(f)
-    return _percentiles_cache
+def flux_to_pil(
+    blob,
+    mode,
+    modes,
+    resize=True,
+    norm_mode="arcsinh",
+    resize_mode="match",
+):
+    """Dispatch to the modality's preprocess() — see `bazaar.modalities`."""
+    mod = get_modality(mode)
+    if mod is None:
+        raise ValueError(f"unknown modality {mode!r}; registered: {sorted(MODALITIES)}")
+    return mod.preprocess(blob, resize=resize, resize_mode=resize_mode, norm_mode=norm_mode)
 
 
 class PreprocessHF:
@@ -146,149 +133,3 @@ class PreprocessAstropt:
                 result[f"{mode}_positions"] = torch.arange(0, len(im), dtype=torch.long)
 
         return result
-
-
-def _get_norm_consts(mode, band_names):
-    """Load norm constants from percentiles.json."""
-    percentiles = _load_percentiles()
-    if percentiles is None:
-        raise FileNotFoundError(
-            "Percentiles file not found. Set $BAZAAR_PERCENTILES_PATH or "
-            "ship the JSON inside bazaar/embed/data/."
-        )
-    mode_data = percentiles[mode]
-    return {
-        band: (mode_data[band]["p1"], mode_data[band]["p99"])
-        for band in band_names
-    }
-
-
-def flux_to_pil(blob, mode, modes, resize=True, norm_mode="arcsinh", resize_mode="match", stretch_alpha=20):
-    """
-    Convert raw fluxes to PIL imagery
-
-    norm_mode: "arcsinh" (default) — arcsinh stretch with global percentile softening
-               "linear" — linear percentile clip (old default)
-               "per_image" — per-image arcsinh (no global percentiles)
-    """
-    # Pre-rendered RGB short-circuit (e.g. galaxy-zoo-10 PNGs). The flux→RGB
-    # path assumes raw flux arrays; gz10 ships already-stretched display PNGs,
-    # so re-arcsinh-stretching them would crush the dynamic range. We resize
-    # to 96×96 to match the legacysurvey path's intermediate canvas and keep
-    # the channels in RGB order (no BGR flip — the flux pipelines flip [g,r,z]
-    # → [z,r,g] to produce display RGB; gz10 is already in that order).
-    if isinstance(blob, dict) and "rendered" in blob:
-        arr = np.asarray(blob["rendered"], dtype=np.uint8)
-        if arr.ndim == 2:
-            arr = np.stack([arr, arr, arr], axis=-1)
-        if arr.ndim != 3 or arr.shape[-1] != 3:
-            raise ValueError(
-                f"'rendered' blob must be (H, W) or (H, W, 3); got shape {arr.shape}"
-            )
-        if resize and arr.shape[:2] != (96, 96):
-            zh = 96 / arr.shape[0]
-            zw = 96 / arr.shape[1]
-            arr = zoom(arr.astype(np.float32), (zh, zw, 1), order=1)
-            arr = np.clip(arr, 0, 255).astype(np.uint8)
-        return arr
-
-    def _norm(chan, percentiles=None, mode="arcsinh"):
-        if percentiles is not None:
-            v0, v1 = percentiles
-            if mode == "arcsinh":
-                t = (chan - v0) / (v1 - v0)
-                stretched = np.arcsinh(stretch_alpha * t)
-                s_high = np.arcsinh(stretch_alpha)
-                chan = (stretched / s_high).clip(0, 1)
-            else:  # linear
-                chan = ((chan - v0) / (v1 - v0)).clip(0, 1)
-        else:
-            # per-image fallback
-            p1 = np.percentile(chan, 1)
-            p99 = np.percentile(chan, 99)
-            t = (chan - p1) / (p99 - p1)
-            stretched = np.arcsinh(stretch_alpha * t)
-            s_high = np.arcsinh(stretch_alpha)
-            chan = (stretched / s_high).clip(0, 1)
-        return chan
-
-    arr = np.asarray(blob["flux"], np.float32)
-    if mode == "hsc":  # 160x160 pixels in MMU dataset
-        if arr.ndim == 3:
-            arr = np.stack([arr[0], arr[1], arr[3]], axis=-1)  # grz
-        elif arr.ndim == 2:
-            arr = np.stack([arr, arr, arr], axis=-1)
-        else:
-            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
-
-        if resize:
-            if resize_mode == "fill":
-                arr = resize_galaxy_to_fit(
-                    arr, target_size=96
-                )
-            else:  # match
-                arr = resize_galaxy_to_fit(
-                    arr, force_extent=(68, 92, 68, 92), target_size=96
-                )
-
-        if norm_mode in ("arcsinh", "linear"):
-            norm_consts = _get_norm_consts("hsc", ("g", "r", "z"))
-            arr = np.stack(
-                [
-                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
-                    for ii, band in enumerate(("g", "r", "z"))
-                ],
-                axis=-1,
-            )
-
-    if mode == "jwst":  # 0.04 pixel per arcsec, 96x96 pixels in MMU dataset
-        if arr.ndim == 3:
-            arr = np.stack([arr[0], arr[4], arr[6]], axis=-1)
-        elif arr.ndim == 2:
-            arr = np.stack([arr, arr, arr], axis=-1)
-        else:
-            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
-
-        if norm_mode in ("arcsinh", "linear"):
-            norm_consts = _get_norm_consts("jwst", ("f090w", "f277w", "f444w"))
-            arr = np.stack(
-                [
-                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
-                    for ii, band in enumerate(("f090w", "f277w", "f444w"))
-                ],
-                axis=-1,
-            )
-
-    if mode == "legacysurvey":
-        if arr.ndim == 3:
-            arr = np.stack([arr[0], arr[1], arr[3]], axis=-1)  # grz
-        elif arr.ndim == 2:
-            arr = np.stack([arr, arr, arr], axis=-1)
-        else:
-            raise ValueError(f"Array shape {arr.shape} for {mode} not recognised")
-
-        if resize:
-            # we always resize legacy to match hsc for our use-case
-            if resize_mode == "fill":
-                arr = resize_galaxy_to_fit(
-                    arr, target_size=96
-                )
-            else:  # match
-                arr = resize_galaxy_to_fit(
-                    arr, force_extent=(72, 88, 72, 88), target_size=96
-                )
-
-        if norm_mode in ("arcsinh", "linear"):
-            norm_consts = _get_norm_consts("legacysurvey", ("g", "r", "z"))
-            arr = np.stack(
-                [
-                    _norm(arr[..., ii], norm_consts[band], mode=norm_mode)
-                    for ii, band in enumerate(("g", "r", "z"))
-                ],
-                axis=-1,
-            )
-
-    if norm_mode == "per_image":
-        arr = _norm(arr)
-    arr = (arr[..., ::-1] * 255).astype(np.uint8)
-    return arr
