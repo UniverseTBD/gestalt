@@ -2785,6 +2785,7 @@ name = "the-bazaar"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "accelerate" },
     { name = "astropt" },
     { name = "datasets" },
     { name = "huggingface-hub" },
@@ -2803,11 +2804,6 @@ dependencies = [
     { name = "transformers" },
 ]
 
-[package.optional-dependencies]
-accelerate = [
-    { name = "accelerate" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -2815,7 +2811,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", marker = "extra == 'accelerate'", specifier = ">=1.0.0" },
+    { name = "accelerate", specifier = ">=1.0.0" },
     { name = "astropt", specifier = ">=2.0.5" },
     { name = "datasets", specifier = ">=2.14" },
     { name = "huggingface-hub", specifier = ">=0.20" },
@@ -2833,7 +2829,6 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.65" },
     { name = "transformers", specifier = ">=4.55.0" },
 ]
-provides-extras = ["accelerate"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.3" }]
