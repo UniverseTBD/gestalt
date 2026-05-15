@@ -105,12 +105,19 @@ Lower-level access (if you already have per-model embeddings as ndarrays):
 from bazaar import BASKET, BazaarFit
 
 fit_obj = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=256)
-fit_obj.save("fits/my-fit")
+fit_obj.save_pretrained("fits/my-fit")
 
-# Later, anywhere:
-fit_obj = BazaarFit.load("fits/my-fit")
+# Later, anywhere — local path, or any HF repo id:
+fit_obj = BazaarFit.from_pretrained("fits/my-fit")
+fit_obj = BazaarFit.from_pretrained("UniverseTBD/bazaar-cosmosweb-d256-jwst")
 unified = fit_obj.transform(new_per_model_embeddings)   # (N, D)
+
+# Publish your own:
+fit_obj.push_to_hub("you/your-fit")
 ```
+
+`BazaarFit` is a `huggingface_hub.ModelHubMixin` — fits are stored as
+`config.json` + safetensors files and are Hub-native.
 
 ### CLI
 

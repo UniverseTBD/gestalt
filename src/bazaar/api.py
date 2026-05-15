@@ -5,7 +5,8 @@ Three verbs:
 - `run(input)` — embed `input` through the 22-model basket and project to a
   unified shared latent via the shipped (or supplied) `BazaarFit`.
 - `fit(input)` — embed `input` and fit a fresh `BazaarFit` at the requested D.
-- `load(fit_dir)` — load a saved `BazaarFit` (callable: `fit(other_input)`).
+- `load(fit_dir_or_repo)` — load a saved `BazaarFit` from a local directory
+  or HF repo id (callable: `fit(other_input)`).
 """
 from __future__ import annotations
 
@@ -14,21 +15,23 @@ from pathlib import Path
 import numpy as np
 
 from bazaar._ingest import iter_galaxies
-from bazaar.basket import BASKET, basket_signature, ensure_default_fit_downloaded
+from bazaar.basket import BASKET, basket_signature
 from bazaar.embed import embed_basket
 from bazaar.fit import BazaarFit
 
-DEFAULT_FITS_DIR = Path.home() / ".cache" / "bazaar" / "fits"
+DEFAULT_FIT_REPOS: dict[str, str] = {
+    "jwst": "UniverseTBD/bazaar-cosmosweb-d256-jwst",
+    "hsc":  "UniverseTBD/bazaar-cosmosweb-d256-hsc",
+}
 
 
 def _resolve_fit(fit: str | Path | BazaarFit, *, modality: str | None = None) -> BazaarFit:
     if isinstance(fit, BazaarFit):
         return fit
     if str(fit) == "default":
-        DEFAULT_FITS_DIR.mkdir(parents=True, exist_ok=True)
-        fit_dir = ensure_default_fit_downloaded(modality or "jwst", DEFAULT_FITS_DIR)
-        return BazaarFit.load(fit_dir)
-    return BazaarFit.load(Path(fit))
+        repo = DEFAULT_FIT_REPOS[modality or "jwst"]
+        return BazaarFit.from_pretrained(repo)
+    return BazaarFit.from_pretrained(str(fit))
 
 
 def run(
@@ -98,15 +101,15 @@ def fit(
     if out is not None:
         out = Path(out)
         out.mkdir(parents=True, exist_ok=True)
-        fit_obj.save(out)
+        fit_obj.save_pretrained(out)
         print(f"[bazaar.fit] Wrote fit → {out}/  (V={fit_obj.mcca_V.shape})")
     return fit_obj
 
 
-def load(fit_dir: str | Path) -> BazaarFit:
-    """Load a `BazaarFit` from disk.
+def load(fit_dir_or_repo: str | Path) -> BazaarFit:
+    """Load a `BazaarFit` from a local directory or HF repo id.
 
     The returned object is callable: `fit(input)` is shorthand for
     `bazaar.run(input, fit=fit)`.
     """
-    return BazaarFit.load(Path(fit_dir))
+    return BazaarFit.from_pretrained(str(fit_dir_or_repo))

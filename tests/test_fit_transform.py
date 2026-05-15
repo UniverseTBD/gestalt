@@ -80,8 +80,8 @@ def test_transform_on_fit_data_recovers_subspace():
 def test_save_load_round_trip(tmp_path):
     embeddings, basket = _synthetic_basket()
     fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
-    fit.save(tmp_path / "fit")
-    reloaded = BazaarFit.load(tmp_path / "fit")
+    fit.save_pretrained(tmp_path / "fit")
+    reloaded = BazaarFit.from_pretrained(tmp_path / "fit")
 
     assert reloaded.D == fit.D
     assert reloaded.seed == fit.seed
@@ -94,6 +94,27 @@ def test_save_load_round_trip(tmp_path):
     np.testing.assert_allclose(
         reloaded.transform(embeddings), fit.transform(embeddings), atol=0,
     )
+
+
+def test_save_pretrained_writes_safetensors(tmp_path):
+    """On-disk layout uses safetensors, not .npz."""
+    from safetensors.numpy import load_file
+
+    embeddings, basket = _synthetic_basket()
+    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit.save_pretrained(tmp_path / "fit")
+
+    fit_dir = tmp_path / "fit"
+    assert (fit_dir / "config.json").exists()
+    assert (fit_dir / "mcca.safetensors").exists()
+    assert not (fit_dir / "mcca.npz").exists()
+    for fam, size in basket:
+        assert (fit_dir / "pca" / f"{fam}_{size}.safetensors").exists()
+        assert not (fit_dir / "pca" / f"{fam}_{size}.npz").exists()
+
+    loaded = load_file(fit_dir / "mcca.safetensors")
+    assert "V" in loaded
+    assert loaded["V"].shape == fit.mcca_V.shape
 
 
 def test_held_out_transform_uses_same_basis(tmp_path):
@@ -124,11 +145,11 @@ def test_legacy_schema_rejected(tmp_path):
 
     embeddings, basket = _synthetic_basket()
     fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
-    fit.save(tmp_path / "legacy")
-    meta_path = tmp_path / "legacy" / "meta.json"
-    meta = json.loads(meta_path.read_text())
-    meta["schema_version"] = 1
-    meta_path.write_text(json.dumps(meta))
+    fit.save_pretrained(tmp_path / "legacy")
+    config_path = tmp_path / "legacy" / "config.json"
+    config = json.loads(config_path.read_text())
+    config["schema_version"] = 1
+    config_path.write_text(json.dumps(config))
 
     with pytest.raises(ValueError, match="Unsupported schema_version"):
-        BazaarFit.load(tmp_path / "legacy")
+        BazaarFit.from_pretrained(tmp_path / "legacy")

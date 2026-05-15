@@ -9,15 +9,20 @@ A `BazaarFit` is everything you need to re-apply the alignment to new data:
 Fit on a reference corpus once; apply to any new per-model embeddings
 forever after via `.transform(...)`.
 
+`BazaarFit` inherits `huggingface_hub.ModelHubMixin`, so saved fits behave
+like normal HF models: `BazaarFit.from_pretrained("org/repo")` downloads
+and loads, `fit.save_pretrained(dir)` writes the standard layout, and
+`fit.push_to_hub("org/repo")` publishes.
+
 On-disk layout (under `<fit_dir>/`):
 
-    meta.json                       schema_version, D, seed, basket order
-    pca/<family>_<size>.npz         pca_components, pca_mean, zscore_mu, zscore_sd
-    mcca.npz                        V (Σ d_m, D)
+    config.json                       schema_version, D, seed, basket order
+    pca/<family>_<size>.safetensors   pca_components, pca_mean, zscore_mu, zscore_sd
+    mcca.safetensors                  V (Σ d_m, D)
 
 The per-model PCA runs at native rank (min(d_in, N)) — no per-model dim
 reduction. All dim reduction happens at the MCCA SVD, so V's row partitioning
-sums the per-model native widths. The JSON pins the basket order so that
+sums the per-model native widths. `config.json` pins the basket order so that
 partitioning is unambiguous when loading.
 """
 from __future__ import annotations
@@ -27,11 +32,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from huggingface_hub import ModelHubMixin, snapshot_download
+from safetensors.numpy import load_file, save_file
 
 from bazaar.align import mcca_fit, mcca_transform
 from bazaar.whiten import pca_zscore_fit, pca_zscore_transform
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def _model_key(family: str, size: str) -> str:
@@ -39,7 +46,7 @@ def _model_key(family: str, size: str) -> str:
 
 
 @dataclass
-class BazaarFit:
+class BazaarFit(ModelHubMixin):
     """Persisted basket fit: per-model full-rank whitener + MCCA projector V."""
 
     D: int
@@ -107,62 +114,78 @@ class BazaarFit:
         from bazaar.api import run  # local import: api → fit back-edge
         return run(input, fit=self, **kwargs)
 
-    def save(self, fit_dir: Path | str) -> None:
-        fit_dir = Path(fit_dir)
-        (fit_dir / "pca").mkdir(parents=True, exist_ok=True)
+    # ----- ModelHubMixin hooks -------------------------------------------------
 
-        meta = {
+    def _save_pretrained(self, save_directory: Path) -> None:
+        save_directory = Path(save_directory)
+        (save_directory / "pca").mkdir(parents=True, exist_ok=True)
+
+        config = {
             "schema_version": SCHEMA_VERSION,
             "D": int(self.D),
             "seed": int(self.seed),
             "basket": [list(t) for t in self.basket],
         }
-        (fit_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        (save_directory / "config.json").write_text(json.dumps(config, indent=2))
 
         for fam, size in self.basket:
             key = _model_key(fam, size)
             art = self.pca[key]
-            np.savez(
-                fit_dir / "pca" / f"{key}.npz",
-                pca_components=art["pca_components"],
-                pca_mean=art["pca_mean"],
-                zscore_mu=art["zscore_mu"],
-                zscore_sd=art["zscore_sd"],
+            save_file(
+                {k: np.ascontiguousarray(v) for k, v in art.items()},
+                save_directory / "pca" / f"{key}.safetensors",
             )
 
         if self.mcca_V is None:
             raise RuntimeError("nothing to save: BazaarFit.mcca_V is None")
-        np.savez(fit_dir / "mcca.npz", V=self.mcca_V)
+        save_file(
+            {"V": np.ascontiguousarray(self.mcca_V)},
+            save_directory / "mcca.safetensors",
+        )
 
     @classmethod
-    def load(cls, fit_dir: Path | str) -> "BazaarFit":
-        fit_dir = Path(fit_dir)
-        meta = json.loads((fit_dir / "meta.json").read_text())
-        if meta["schema_version"] != SCHEMA_VERSION:
+    def _from_pretrained(
+        cls,
+        *,
+        model_id: str,
+        revision: str | None,
+        cache_dir: str | Path | None,
+        force_download: bool,
+        local_files_only: bool,
+        token: str | bool | None,
+        **model_kwargs,
+    ) -> "BazaarFit":
+        local = Path(model_id)
+        if local.is_dir():
+            fit_dir = local
+        else:
+            fit_dir = Path(snapshot_download(
+                repo_id=str(model_id),
+                revision=revision,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                local_files_only=local_files_only,
+                token=token,
+            ))
+
+        config = json.loads((fit_dir / "config.json").read_text())
+        if config["schema_version"] != SCHEMA_VERSION:
             raise ValueError(
-                f"Unsupported schema_version {meta['schema_version']} "
-                f"(this code only supports {SCHEMA_VERSION}; "
-                f"older fits used per-model PCA-to-D, regenerate to load)"
+                f"Unsupported schema_version {config['schema_version']} "
+                f"(this code only supports {SCHEMA_VERSION}; regenerate the fit)"
             )
-        basket = [tuple(t) for t in meta["basket"]]
+        basket = [tuple(t) for t in config["basket"]]
 
         pca: dict[str, dict[str, np.ndarray]] = {}
         for fam, size in basket:
             key = _model_key(fam, size)
-            with np.load(fit_dir / "pca" / f"{key}.npz") as f:
-                pca[key] = {
-                    "pca_components": f["pca_components"],
-                    "pca_mean":       f["pca_mean"],
-                    "zscore_mu":      f["zscore_mu"],
-                    "zscore_sd":      f["zscore_sd"],
-                }
+            pca[key] = load_file(fit_dir / "pca" / f"{key}.safetensors")
 
-        with np.load(fit_dir / "mcca.npz") as f:
-            V = f["V"]
+        V = load_file(fit_dir / "mcca.safetensors")["V"]
 
         return cls(
-            D=int(meta["D"]),
-            seed=int(meta["seed"]),
+            D=int(config["D"]),
+            seed=int(config["seed"]),
             basket=basket,
             pca=pca,
             mcca_V=V,

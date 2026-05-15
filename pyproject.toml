@@ -15,6 +15,7 @@ dependencies = [
     "tqdm>=4.65",
     "matplotlib>=3.7",
     "huggingface_hub>=0.20",
+    "safetensors>=0.4",
     "pyarrow>=14.0",
     # Image → embedding (vendored from platonic-universe)
     "torch>=2.8.0",

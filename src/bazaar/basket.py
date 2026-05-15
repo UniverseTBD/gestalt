@@ -90,37 +90,6 @@ def emb_npy_path(emb_dir: Path, telescope: str, family: str, size: str) -> Path:
     return emb_dir / fname
 
 
-def ensure_default_fit_downloaded(modality: str, cache_dir: Path) -> Path:
-    """Download the shipped BazaarFit for `modality` from HF if absent.
-
-    The artifact lives under
-    `UniverseTBD/pu-embeddings:bazaar-fits/cosmosweb-d256-<modality>/`
-    and contains the `meta.json`, `pca/*.npz`, and `mcca.npz` files written
-    by `BazaarFit.save`. Returns the local path to the fit directory.
-    """
-    from huggingface_hub import snapshot_download
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    subpath = f"bazaar-fits/cosmosweb-d256-{modality}"
-    fit_dir = cache_dir / subpath
-    if (fit_dir / "meta.json").exists() and (fit_dir / "mcca.npz").exists():
-        return fit_dir
-
-    print(f"[bazaar] Downloading default fit for {modality} to {fit_dir}...")
-    snapshot_download(
-        repo_id="UniverseTBD/pu-embeddings",
-        repo_type="dataset",
-        allow_patterns=f"{subpath}/*",
-        local_dir=cache_dir,
-    )
-    if not (fit_dir / "meta.json").exists():
-        raise FileNotFoundError(
-            f"Download succeeded but {fit_dir/'meta.json'} is missing; "
-            f"the default fit may not yet be published."
-        )
-    return fit_dir
-
-
 def load_embeddings(
     basket: list[tuple[str, str]],
     telescope: str,

@@ -212,7 +212,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "writes a unified (N, D) .npy")
     _add_run_fit_shared(run_p)
     run_p.add_argument("--fit", default="default",
-                       help="'default' downloads the shipped fit, or pass a directory")
+                       help="'default' (shipped fit), a local directory, "
+                            "or a HuggingFace repo id (e.g. org/repo)")
     run_p.add_argument("--out", type=Path, default=Path("unified.npy"))
     run_p.set_defaults(func=cmd_run)
 

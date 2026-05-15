@@ -21,7 +21,7 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 
 ## CLI surface (`bazaar = bazaar.cli:main`)
 
-- `bazaar run <input> --fit {<dir>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` downloads the shipped COSMOS-Web D=256 fit from HF.
+- `bazaar run <input> --fit {<dir>|<hf-repo-id>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` resolves to the shipped per-modality repo (`api.DEFAULT_FIT_REPOS`); a local dir or any HF model repo id also works (loaded via `BazaarFit.from_pretrained`).
 - `bazaar fit <input> --D 1024 --out fits/<dir>` — embed `<input>` and fit a fresh `BazaarFit` to disk.
 - `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir data/embeddings` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
 - `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
@@ -49,13 +49,13 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
                 bazaar.bench.probe.run_probe  (linear probe R²)
 ```
 
-**`BazaarFit` is the central artifact.** It bundles per-model PCA components + means, per-feature z-score stats, and the MCCA projector `V` of shape `(M·D, D)`. The directory layout is:
+**`BazaarFit` is the central artifact.** It bundles per-model PCA components + means, per-feature z-score stats, and the MCCA projector `V` of shape `(M·D, D)`. It inherits `huggingface_hub.ModelHubMixin`, so `BazaarFit.from_pretrained("org/repo")` / `fit.save_pretrained(dir)` / `fit.push_to_hub("org/repo")` all work natively. The directory layout is:
 
 ```
 <fit_dir>/
-├── meta.json                # schema_version, D, seed, basket order (pins V's row partitioning)
-├── pca/<family>_<size>.npz  # pca_components, pca_mean, zscore_mu, zscore_sd
-└── mcca.npz                 # V
+├── config.json                       # schema_version, D, seed, basket order (pins V's row partitioning)
+├── pca/<family>_<size>.safetensors   # pca_components, pca_mean, zscore_mu, zscore_sd
+└── mcca.safetensors                  # V
 ```
 
 `transform` projects new data via `C_new @ V`, where `C_new` is the horizontal stack of per-model whitened features. On fit data this differs from the fit-time `S = U Σ` only by randomized-SVD reprojection error (~1e-4 on float32). The column space is preserved exactly.
@@ -65,7 +65,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 - `basket.py` — the canonical `BASKET` list (22 (family, size) tuples), HF download glue, `load_embeddings`, and `ensure_default_fit_downloaded` (resolves `--fit default`).
 - `align.py` — `mcca_fit` (returns `V` + fit-time `S`) and `mcca_transform`. Unsupervised; operates on already-whitened per-model features.
 - `whiten.py` — `pca_zscore_fit` / `pca_zscore_transform` (PCA-to-D then per-feature z-score) and `zscore_fit` / `zscore_transform` (no PCA). Tiny and dependency-light so `fit.py` can import it without dragging in the benchmark suite.
-- `fit.py` — the persistent `BazaarFit` dataclass. `SCHEMA_VERSION = 4`; bump it if you change the on-disk layout.
+- `fit.py` — the persistent `BazaarFit` dataclass (a `huggingface_hub.ModelHubMixin` subclass). `SCHEMA_VERSION = 5`; bump it if you change the on-disk layout.
 - `api.py` — the three Python verbs `run`, `fit`, `load`.
 - `cli.py` — argparse subcommands.
 - `_ingest/` — HF dataset adapters (`hf_streaming`, `gz10`, `galaxies`) that produce `CatalogSource` rows + label streams.
