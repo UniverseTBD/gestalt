@@ -23,7 +23,6 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 
 - `bazaar run <input> --fit {<dir>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` downloads the shipped COSMOS-Web D=256 fit from HF.
 - `bazaar fit <input> --D 1024 --out fits/<dir>` — embed `<input>` and fit a fresh `BazaarFit` to disk.
-- `bazaar load <fit_dir>` — print a saved fit's meta + `V` shape.
 - `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir data/embeddings` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
 - `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
 - `bazaar bench galaxies --out data/galaxies.parquet` — Smith42/galaxies (v2.0) sweep (13 paper-faithful regression targets).

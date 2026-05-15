@@ -1,15 +1,13 @@
-"""Bazaar CLI: three user verbs (run / fit / load), a plot verb, and a bench verb.
+"""Bazaar CLI: two user verbs (run / fit), a plot verb, and a bench verb.
 
 - `bazaar run   <input>`            — embed + transform via shipped or supplied fit
 - `bazaar fit   <input>`            — embed + fit a fresh BazaarFit
-- `bazaar load  <fit_dir>`          — inspect a saved fit
 - `bazaar bench {cosmos,gz10,galaxies} ...` — the dataset benchmark sweeps
 - `bazaar plot  --data <parquet>`   — render plots from a bench parquet
 """
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np
@@ -19,10 +17,9 @@ from bazaar import api
 from bazaar.basket import BASKET, ensure_embeddings_downloaded
 from bazaar.bench.cosmosweb import catalog_pass, run_cosmosweb
 from bazaar.bench.plotting import render_plots
-from bazaar.fit import BazaarFit
 
 # ---------------------------------------------------------------------------
-# Public verbs (run / fit / load)
+# Public verbs (run / fit)
 # ---------------------------------------------------------------------------
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -51,20 +48,6 @@ def cmd_fit(args: argparse.Namespace) -> int:
         batch_size=args.batch_size,
         out=args.out,
     )
-    return 0
-
-
-def cmd_load(args: argparse.Namespace) -> int:
-    fit = BazaarFit.load(args.fit_dir)
-    meta = {
-        "fit_dir": str(args.fit_dir),
-        "D": fit.D,
-        "seed": fit.seed,
-        "basket_len": len(fit.basket),
-        "basket": [list(t) for t in fit.basket],
-        "V_shape": list(fit.mcca_V.shape) if fit.mcca_V is not None else None,
-    }
-    print(json.dumps(meta, indent=2))
     return 0
 
 
@@ -241,11 +224,6 @@ def main(argv: list[str] | None = None) -> int:
     fit_p.add_argument("--out", type=Path, required=True,
                        help="Output directory for the saved fit")
     fit_p.set_defaults(func=cmd_fit)
-
-    load_p = sub.add_parser("load",
-                            help="Inspect a saved BazaarFit (prints meta + V shape)")
-    load_p.add_argument("fit_dir", type=Path)
-    load_p.set_defaults(func=cmd_load)
 
     bench_p = sub.add_parser("bench", help="benchmark sweeps")
     bench_sub = bench_p.add_subparsers(dest="dataset", required=True)
