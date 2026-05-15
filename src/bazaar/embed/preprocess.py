@@ -11,6 +11,7 @@ Differences from upstream:
 """
 from functools import partial
 
+import numpy as np
 import torch
 from astropt.local_datasets import GalaxyImageDataset
 from torchvision import transforms
@@ -76,11 +77,11 @@ class PreprocessHF:
                 else:
                     proc_out = self.autoproc(im, return_tensors="pt")
                 if "pixel_values" in proc_out:
-                    result[f"{mode}"] = proc_out["pixel_values"].squeeze()
+                    result[f"{mode}"] = proc_out["pixel_values"].squeeze().numpy()
                 elif "pixel_values_videos" in proc_out:
                     result[f"{mode}"] = proc_out["pixel_values_videos"].repeat(
                         1, 16, 1, 1, 1
-                    ).squeeze()
+                    ).squeeze().numpy()
                 else:
                     raise KeyError(
                         "autoproc does not have 'pixel_values' or "
@@ -128,8 +129,8 @@ class PreprocessAstropt:
                 im = self.f2p(idx[f"{mode}_image"], mode, self.modes).swapaxes(0, 2)
                 im = self.galproc.process_galaxy(
                     torch.from_numpy(im).to(torch.float)
-                ).to(torch.float)
+                ).to(torch.float).numpy()
                 result[f"{mode}_images"] = im
-                result[f"{mode}_positions"] = torch.arange(0, len(im), dtype=torch.long)
+                result[f"{mode}_positions"] = np.arange(0, len(im), dtype=np.int64)
 
         return result
