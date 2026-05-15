@@ -77,7 +77,11 @@ class HFAdapter(ModelAdapter):
             with torch.amp.autocast("cuda", enabled=self._use_amp, dtype=torch.float16):
                 if self.alias == "clip":
                     outputs = self.model.get_image_features(pixel_values=inputs)
-                    return outputs.float().detach()
+                    # transformers >=5.0 returns BaseModelOutputWithPooling here
+                    # (projected image features live in `pooler_output`); older
+                    # versions returned a plain tensor.
+                    feats = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs
+                    return feats.float().detach()
                 outputs = self.model(inputs).last_hidden_state
                 if self.alias in ("vit", "vit-mae"):
                     emb = outputs[:, 1:].mean(dim=1)
