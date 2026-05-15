@@ -181,7 +181,7 @@ class VLMAdapter(HFAdapter):
         self.processor = AutoProcessor.from_pretrained(self.model_name)
         self.model = AutoModelForImageTextToText.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="balanced",
             low_cpu_mem_usage=True,
         ).eval()
