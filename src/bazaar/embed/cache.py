@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "bazaar" / "embeds"
+DEFAULT_CACHE_DIR = Path("embeds")
 
 
 def cache_root(cache_dir: Path | None, fingerprint: str) -> Path:

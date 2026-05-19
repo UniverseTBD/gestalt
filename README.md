@@ -123,7 +123,7 @@ fit_obj.push_to_hub("you/your-fit")
 
 ```bash
 # Embed a catalog and apply the shipped fit (downloads ~8 GB of model weights
-# on first run; embeddings are cached under ~/.cache/bazaar/embeds).
+# on first run; embeddings are cached under ./embeds).
 bazaar run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out unified.npy
 
 # Fit on your own data.
@@ -140,7 +140,7 @@ Both `run` and `fit` accept:
 | `--split` | `train` | dataset split to stream |
 | `--max-samples N` | all | cap on galaxies ingested |
 | `--modality {hsc,jwst,legacysurvey}` | inferred | override band-set detection |
-| `--cache-dir PATH` | `~/.cache/bazaar/embeds` | per-model `.npy` cache |
+| `--cache-dir PATH` | `./embeds` | per-model `.npy` cache |
 | `--batch-size N` | 64 | inference batch size |
 
 ## Evaluation harness
@@ -153,7 +153,7 @@ targets on Smith42/galaxies respectively:
 
 ```bash
 bazaar bench cosmos --D 256 --out data/results_pca256.parquet \
-                    --emb-dir data/embeddings
+                    --emb-dir embeds
 bazaar plot         --data data/results_pca256.parquet --suffix _pca256
 ```
 

@@ -23,12 +23,12 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 
 - `bazaar run <input> --fit {<dir>|<hf-repo-id>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` resolves to the shipped per-modality repo (`api.DEFAULT_FIT_REPOS`); a local dir or any HF model repo id also works (loaded via `BazaarFit.from_pretrained`).
 - `bazaar fit <input> --D 1024 --out fits/<dir>` — embed `<input>` and fit a fresh `BazaarFit` to disk.
-- `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir data/embeddings` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
+- `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir embeds` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
 - `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
 - `bazaar bench galaxies --out data/galaxies.parquet` — Smith42/galaxies (v2.0) sweep (13 paper-faithful regression targets).
 - `bazaar plot --data <parquet> --suffix _pca256` — strip plots, 2×3 summary grid, stats table into `figs/`.
 
-`run`/`fit` infer modality from the input dataset's band list (override with `--modality`); per-model `.npy` embeddings are cached under `~/.cache/bazaar/embeds`. There is no `bazaar embed` or `bazaar transform` subcommand — the equivalents are `bazaar.embed.embed_basket` and `BazaarFit.transform` in the Python API.
+`run`/`fit` infer modality from the input dataset's band list (override with `--modality`); per-model `.npy` embeddings are cached under `./embeds`. There is no `bazaar embed` or `bazaar transform` subcommand — the equivalents are `bazaar.embed.embed_basket` and `BazaarFit.transform` in the Python API.
 
 ## Architecture
 

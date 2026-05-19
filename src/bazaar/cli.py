@@ -63,8 +63,9 @@ def _add_cosmos_bench_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--out", type=Path, required=True,
                    help="Output parquet path")
     p.add_argument("--emb-dir", type=Path,
-                   default=Path("data/embeddings"),
-                   help="Where the per-model .npy embedding cache lives")
+                   default=Path("embeds"),
+                   help="Where the per-model .npy embedding cache lives "
+                        "(default: ./embeds)")
     p.add_argument("--stream-script", type=Path,
                    default=Path(__file__).resolve().parents[2]
                    / "scripts" / "stream_embeddings_to_npy.py",
@@ -91,7 +92,7 @@ def _add_dataset_bench_args(
                    help="Cap on rows ingested (default: full split)")
     p.add_argument("--cache-dir", type=Path, default=None,
                    help="Per-model .npy embedding cache "
-                        "(default: ~/.cache/bazaar/embeds)")
+                        "(default: ./embeds)")
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--whiten", choices=["pca_zscore", "zscore"], default="pca_zscore",
                    help="Per-model whitener before MCCA. 'zscore' is a PCA ablation.")
@@ -246,7 +247,7 @@ def _add_run_fit_shared(p: argparse.ArgumentParser) -> None:
                    help="Override band-set modality (default: inferred from image.band)")
     p.add_argument("--cache-dir", type=Path, default=None,
                    help="Where per-model .npy embeddings are cached "
-                        "(default: ~/.cache/bazaar/embeds)")
+                        "(default: ./embeds)")
     p.add_argument("--batch-size", type=int, default=64)
 
 
