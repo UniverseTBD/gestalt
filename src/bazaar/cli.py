@@ -206,6 +206,63 @@ def cmd_bench_gz10(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_sources(s: str) -> list[str]:
+    """Parse `--sources cosmos-hsc,gz10,...` (special token 'all' expands)."""
+    from bazaar.bench.transfer import CORPORA
+    toks = [tok.strip() for tok in s.split(",") if tok.strip()]
+    if not toks:
+        raise argparse.ArgumentTypeError("--sources must list at least one corpus")
+    if toks == ["all"]:
+        return list(CORPORA)
+    out: list[str] = []
+    for tok in toks:
+        if tok == "all":
+            raise argparse.ArgumentTypeError("'all' cannot be mixed with explicit sources")
+        if tok not in CORPORA:
+            raise argparse.ArgumentTypeError(
+                f"unknown source {tok!r}; expected from {CORPORA}"
+            )
+        out.append(tok)
+    return out
+
+
+def cmd_bench_transfer(args: argparse.Namespace) -> int:
+    from bazaar.bench.transfer import CORPORA, run_transfer  # local: heavy imports
+
+    if args.target not in CORPORA:
+        raise SystemExit(f"unknown --target {args.target!r}; expected from {CORPORA}")
+
+    args.emb_dir.mkdir(parents=True, exist_ok=True)
+    # COSMOS embeddings live as cached .npy; download any missing before fitting.
+    cosmos_telescopes = [
+        m for m in ("hsc", "jwst")
+        if f"cosmos-{m}" in args.sources or f"cosmos-{m}" == args.target
+    ]
+    if cosmos_telescopes:
+        ensure_embeddings_downloaded(
+            BASKET, cosmos_telescopes, args.emb_dir, args.stream_script,
+        )
+
+    rows = run_transfer(
+        args.target, args.sources,
+        n_fit=args.n_fit, D=args.D, n_seeds=args.n_seeds,
+        test_size=args.test_size,
+        emb_dir=args.emb_dir, cache_dir=args.cache_dir,
+        target_split=args.target_split,
+        target_max_samples=args.target_max_samples,
+        target_n_use=args.target_n_use,
+        source_split=args.source_split,
+        source_max_samples=args.source_max_samples,
+        source_n_use=args.source_n_use,
+        batch_size=args.batch_size, seed=args.seed,
+    )
+    df = pl.DataFrame(rows, infer_schema_length=None)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.transfer] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
 def cmd_bench_galaxies(args: argparse.Namespace) -> int:
     from bazaar.bench.galaxies import run_galaxies  # local: heavy imports
 
@@ -331,6 +388,61 @@ def main(argv: list[str] | None = None) -> int:
         help="Base seed for subset draws; (k, kind) offsets are added.",
     )
     scaling_p.set_defaults(func=cmd_bench_scaling)
+
+    transfer_p = bench_sub.add_parser(
+        "transfer",
+        help="Cross-survey generalization (§3.2): fit on source corpus, "
+             "probe on target. One parquet per target.",
+    )
+    transfer_p.add_argument(
+        "--target", required=True,
+        choices=["cosmos-hsc", "cosmos-jwst", "gz10", "galaxies"],
+        help="Target corpus whose labels we probe.",
+    )
+    transfer_p.add_argument(
+        "--sources", type=_parse_sources, default=_parse_sources("all"),
+        help="Comma-separated source corpora to fit on (or 'all'). "
+             "Each becomes a `fit_source` row in the output. "
+             "Include the target itself to get a native baseline at the same "
+             "n_fit.",
+    )
+    transfer_p.add_argument("--n-fit", type=int, default=10_000,
+                            help="Rows per source to fit each BazaarFit on. "
+                                 "Same for every source so corpus size isn't a confound.")
+    transfer_p.add_argument("--D", type=int, default=1024,
+                            help="Shared latent dimensionality.")
+    transfer_p.add_argument("--n-seeds", type=int, default=5)
+    transfer_p.add_argument("--test-size", type=int, default=2_500)
+    transfer_p.add_argument("--seed", type=int, default=0,
+                            help="Seed threaded into BazaarFit.fit and the concat-PCA fit.")
+    transfer_p.add_argument("--emb-dir", type=Path,
+                            default=Path("embeds"),
+                            help="Per-model .npy cache for cosmos-{hsc,jwst} "
+                                 "(default: ./embeds).")
+    transfer_p.add_argument("--cache-dir", type=Path, default=None,
+                            help="Per-fingerprint embed cache for gz10/galaxies "
+                                 "(default: ./embeds).")
+    transfer_p.add_argument("--stream-script", type=Path,
+                            default=Path(__file__).resolve().parents[2]
+                            / "scripts" / "stream_embeddings_to_npy.py",
+                            help="Path to the cosmosweb embedding downloader script.")
+    transfer_p.add_argument("--target-split", default=None,
+                            help="Split for gz10 (default 'train') / galaxies (default 'test'). "
+                                 "Ignored for cosmos-*.")
+    transfer_p.add_argument("--target-max-samples", type=int, default=None,
+                            help="Cap target gz10/galaxies rows (default: full split).")
+    transfer_p.add_argument("--target-n-use", type=int, default=None,
+                            help="Cap cosmos target rows (default: 45000).")
+    transfer_p.add_argument("--source-split", default=None,
+                            help="Split for gz10/galaxies sources (defaults match bench commands).")
+    transfer_p.add_argument("--source-max-samples", type=int, default=None,
+                            help="Cap source gz10/galaxies rows (default: full split, then sliced to n_fit).")
+    transfer_p.add_argument("--source-n-use", type=int, default=None,
+                            help="Cap cosmos source rows loaded (default: 45000).")
+    transfer_p.add_argument("--batch-size", type=int, default=64)
+    transfer_p.add_argument("--out", type=Path, required=True,
+                            help="Output parquet path (one per target).")
+    transfer_p.set_defaults(func=cmd_bench_transfer)
 
     plot_p = sub.add_parser("plot", help="Render plots + stats from a bench parquet")
     plot_p.add_argument("--data", type=Path, required=True)

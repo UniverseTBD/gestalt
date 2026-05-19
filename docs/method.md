@@ -101,6 +101,27 @@ subspace *before* the probe sees any labels. That's why a basket win
 here is evidence for **representational convergence**; a concat win
 would only be evidence that probes are good at feature selection.
 
+## Cross-survey generalization (§3.2)
+
+`bench transfer` operates one rung above the per-corpus sweeps: instead of
+training and evaluating a `BazaarFit` on the same corpus, it fits on
+corpus A and probes on corpus B's labels. For each (target T, source S),
+fit `BazaarFit(D)` on the first `n_fit` rows of S's 22-model embeddings,
+project T's full embeddings through it with `BazaarFit.transform`, then
+run `run_probe` / `run_classification_probe` on T's labels. A
+`concat→PCA-to-D` projector fit on the same S rows runs alongside as a
+transferable baseline — without it, a positive transfer result can't be
+attributed to MCCA over any unsupervised linear projection. Every source
+is capped to the same `n_fit` so corpus size is not a confound across the
+matrix (HSC 45k, JWST 45k, GZ10 ~17k, galaxies 86k). Output is one
+parquet per target, with the same long-form schema as the per-corpus
+sweeps plus a `fit_source` column.
+
+When `S == T` the cell is a *native baseline at the same n_fit* — the
+apples-to-apples reference each cross-fit is compared against. The
+existing `bench {cosmos,gz10,galaxies}` parquets remain the reference
+for "best achievable native R²" at full corpus size.
+
 ## Hyperparameters
 
 - `D` (PCA / shared-latent dimensionality): default 256. We sweep

@@ -161,6 +161,29 @@ This writes a 1 500-row long-form parquet (modality × property × seed ×
 {naive, procrustes, mcca, 22×single}) plus per-modality strip plots, a
 2×3 summary grid, and a stats table under `figs/`.
 
+### Cross-survey generalization (`bazaar bench transfer`)
+
+`bench transfer` answers a sharper version of the convergence question:
+**is a fit trained on corpus A almost as good on B as B's native fit?** If
+yes the recovered subspace is genuinely Platonic; if cross-survey transfer
+collapses, the Bazaar claim is *conditional on survey systematics*. For
+each target T (`cosmos-hsc`, `cosmos-jwst`, `gz10`, `galaxies`) the sweep
+fits a `BazaarFit` (and a `concat→PCA` baseline) on the first `--n-fit`
+rows of every source S, transforms T's full embeddings through it, and
+runs the same linear probe on T's labels. Source corpora are size-matched
+(10 000 rows by default) so "fit corpus size" isn't a confound.
+
+```bash
+for t in cosmos-hsc cosmos-jwst gz10 galaxies; do
+    bazaar bench transfer --target $t --out data/transfer_$t.parquet
+done
+```
+
+Each parquet adds a `fit_source` column on top of the standard long-form
+schema. The headline cells are the cross-survey ones (`cosmos-hsc ↔
+{gz10, galaxies}`); `gz10 ↔ galaxies` is a within-survey control and
+`cosmos-hsc ↔ cosmos-jwst` is a cross-modality sanity check.
+
 ## What this is *not*
 
 - It's **not** an ensemble. The basket members were never trained on the
