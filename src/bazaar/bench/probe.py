@@ -43,7 +43,7 @@ def run_classification_probe(
     y: np.ndarray,
     test_size: int,
     random_state: int,
-    max_iter: int = 2000,
+    max_iter: int = 5000,
 ) -> tuple[float, float]:
     """Train a multinomial logistic probe; return (accuracy, macro-F1).
 
