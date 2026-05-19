@@ -10,11 +10,10 @@ Sweeps R² vs basket size k under two subset-selection policies:
 For each modality we
 
   1. load all 22 cached per-model embeddings once,
-  2. run single-model probes once (single-model R² is invariant to subset),
-  3. pre-compute the full-rank per-model whitening once,
-  4. for each k × subset_kind × subset_id:
-       * MCCA on the whitened subset                → `basket_mcca_whitened`
-       * concat→PCA-to-D on the raw subset           → `basket_concat_pca`
+  2. pre-compute the full-rank per-model whitening once,
+  3. for each k × subset_kind × subset_id:
+       * MCCA on the whitened subset → `basket_mcca_whitened`
+         (same fusion as `bazaar fit`),
        * linear probe on each property × seed.
 
 Output is long-form parquet sharing the cosmos schema, with extra columns
@@ -28,7 +27,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
-from sklearn.decomposition import PCA
 
 from bazaar.align import mcca_fit
 from bazaar.basket import load_embeddings
@@ -113,37 +111,22 @@ def precompute_full_whitened(
 
 def build_basket_sources_subset(
     Zs_white_by_name: dict[str, np.ndarray],
-    embeddings: dict[str, np.ndarray],
     subset_names: list[str],
     D: int,
     *,
     log_prefix: str = "[bazaar.scaling]",
 ) -> list[tuple[str, np.ndarray]]:
-    """Build the two canonical basket sources for one subset.
+    """Build the MCCA basket source for one subset.
 
-    Mirrors `bench._runner.build_basket_sources` but consumes the precomputed
-    `Zs_white_by_name` so the expensive per-model whitening is paid once per
-    modality rather than once per subset.
+    Consumes the precomputed `Zs_white_by_name` so the expensive per-model
+    whitening is paid once per modality rather than once per subset. Output
+    matches `bench._runner.build_basket_sources["basket_mcca_whitened"]`,
+    which is the fusion used by `bazaar fit`.
     """
     Zs_subset = [Zs_white_by_name[n] for n in subset_names]
     _, B_mcca = mcca_fit(Zs_subset, D=D, seed=0)
     print(f"{log_prefix} MCCA on {len(subset_names)} views → {B_mcca.shape}")
-
-    C_raw = np.concatenate(
-        [embeddings[n] for n in subset_names], axis=1,
-    ).astype(np.float32)
-    D_concat = min(D, C_raw.shape[1], C_raw.shape[0])
-    B_concat = PCA(
-        n_components=D_concat, svd_solver="randomized", random_state=0,
-    ).fit_transform(C_raw).astype(np.float32)
-    del C_raw
-    gc.collect()
-    print(f"{log_prefix} concat→PCA-to-{D_concat} → {B_concat.shape}")
-
-    return [
-        ("basket_mcca_whitened", B_mcca),
-        ("basket_concat_pca", B_concat),
-    ]
+    return [("basket_mcca_whitened", B_mcca)]
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +213,7 @@ def run_scaling_cosmos(
                 tag = f"{telescope} k={k:>2d} {kind_label:<14s} #{subset_id}"
                 print(f"[bazaar.scaling] {tag}: {subset_names}")
                 basket_sources = build_basket_sources_subset(
-                    Zs_white_by_name, embeddings, subset_names, D=D,
+                    Zs_white_by_name, subset_names, D=D,
                     log_prefix=f"[bazaar.scaling]   {tag}",
                 )
                 members_json = json.dumps(subset_names)
@@ -272,11 +255,9 @@ def _print_subset_summary(
             and r["source"] == src
         ]
     parts = [f"  → {kind_label:<14s} #{subset_id}"]
-    for src in ("basket_mcca_whitened", "basket_concat_pca"):
-        vals = _pick(src)
-        if vals:
-            tag = src.replace("basket_", "")
-            parts.append(f"{tag}={np.mean(vals):.4f}±{np.std(vals):.4f}")
+    vals = _pick("basket_mcca_whitened")
+    if vals:
+        parts.append(f"mcca_whitened={np.mean(vals):.4f}±{np.std(vals):.4f}")
     print("  ".join(parts))
 
 

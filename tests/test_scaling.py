@@ -96,14 +96,14 @@ def test_build_basket_sources_subset_shapes_and_finite():
 
     # Random subset of 3 of 6.
     sources = build_basket_sources_subset(
-        Zs_white, embeddings, subset_names=names[:3], D=16,
+        Zs_white, subset_names=names[:3], D=16,
         log_prefix="[test]",
     )
     by_name = dict(sources)
-    assert set(by_name) == {"basket_mcca_whitened", "basket_concat_pca"}
-    for B in by_name.values():
-        assert B.shape == (300, 16)
-        assert np.all(np.isfinite(B))
+    assert set(by_name) == {"basket_mcca_whitened"}
+    B = by_name["basket_mcca_whitened"]
+    assert B.shape == (300, 16)
+    assert np.all(np.isfinite(B))
 
 
 def test_build_basket_sources_subset_full_basket_matches_runner():
@@ -116,15 +116,10 @@ def test_build_basket_sources_subset_full_basket_matches_runner():
 
     runner_sources = dict(build_basket_sources(embeddings, names, D=16))
     subset_sources = dict(build_basket_sources_subset(
-        Zs_white, embeddings, subset_names=names, D=16, log_prefix="[test]",
+        Zs_white, subset_names=names, D=16, log_prefix="[test]",
     ))
     # MCCA output must be bit-for-bit identical (same whitening, same seed).
     np.testing.assert_array_equal(
         subset_sources["basket_mcca_whitened"],
         runner_sources["basket_mcca_whitened"],
-    )
-    # concat→PCA uses the same randomized SVD with random_state=0; identical too.
-    np.testing.assert_array_equal(
-        subset_sources["basket_concat_pca"],
-        runner_sources["basket_concat_pca"],
     )

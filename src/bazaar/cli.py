@@ -317,13 +317,13 @@ def main(argv: list[str] | None = None) -> int:
              "k == len(basket) is always evaluated as the single 'full' subset.",
     )
     scaling_p.add_argument(
-        "--n-random-per-k", type=int, default=1,
-        help="Random subset draws per k (default: 1, no error bars). "
+        "--n-random-per-k", type=int, default=8,
+        help="Random subset draws per k (default: 8). "
              "Ignored at k == len(basket).",
     )
     scaling_p.add_argument(
-        "--n-one-per-family", type=int, default=1,
-        help="One-per-family subset draws per k (default: 1, no error bars). "
+        "--n-one-per-family", type=int, default=8,
+        help="One-per-family subset draws per k (default: 8). "
              "Skipped when k > n_families.",
     )
     scaling_p.add_argument(
