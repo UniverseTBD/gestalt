@@ -32,7 +32,6 @@ from sklearn.decomposition import PCA
 
 from bazaar.align import mcca_fit
 from bazaar.basket import load_embeddings
-from bazaar.bench._runner import whiten_per_model
 from bazaar.bench.cosmosweb import PROPERTIES
 from bazaar.bench.probe import run_probe
 from bazaar.whiten import pca_zscore_fit
@@ -193,17 +192,14 @@ def run_scaling_cosmos(
 ) -> list[dict]:
     """Scaling sweep on one COSMOS-Web telescope.
 
-    Returns long-form rows. Singles emit `k=None, subset_kind="single"`;
-    basket rows carry the (k, subset_kind, subset_id, subset_members) trio.
+    Returns long-form rows: each row is one (k, subset_kind, subset_id,
+    property, source, seed) probe. Single-model baselines are not produced
+    here; pair this parquet with a `bazaar bench cosmos` run if you want
+    them as reference lines.
     """
     print(f"\n[bazaar.scaling] === {telescope.upper()} ({whiten_mode}) D={D} ===")
     embeddings = load_embeddings(basket, telescope, emb_dir, n_use=n_use)
     model_names = [f"{f}_{s}" for f, s in basket]
-
-    print(f"[bazaar.scaling] Single-model probes ({len(model_names)} models)...")
-    Zs_single, single_tag = whiten_per_model(
-        embeddings, model_names, D=D, whiten_mode=whiten_mode,
-    )
 
     rows: list[dict] = []
     eff_test_by_prop: dict[str, int] = {}
@@ -217,18 +213,6 @@ def run_scaling_cosmos(
         else:
             eff_test = test_size
         eff_test_by_prop[prop] = eff_test
-        for seed in range(n_seeds):
-            for name, Z in zip(model_names, Zs_single):
-                rows.append(dict(
-                    modality=telescope, property=prop, kind="regression",
-                    source=f"single_{name}_{single_tag}", seed=seed,
-                    r2=run_probe(Z, y, test_size=eff_test, random_state=seed),
-                    acc=np.nan, f1=np.nan, n_valid=n_valid,
-                    k=None, subset_kind="single", subset_id=0,
-                    subset_members=json.dumps([name]),
-                ))
-    del Zs_single
-    gc.collect()
 
     print(f"[bazaar.scaling] Pre-whitening {len(model_names)} models (full-rank)...")
     Zs_white_by_name = precompute_full_whitened(embeddings, model_names)

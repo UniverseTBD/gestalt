@@ -313,6 +313,8 @@ def render_scaling_plot(
     for modality in modalities:
         for prop in properties:
             best, median = _singles_ref(df, modality, prop)
+            if not np.isfinite(best):
+                continue
             stats_lines.append(
                 f"{modality:<6}{prop:<10}{'best_single':<22}"
                 f"{'reference':<16}{'-':>4}{best:>12.4f}{0.0:>10.4f}{0:>5d}"
