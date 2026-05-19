@@ -73,10 +73,24 @@ def plot_one_panel(ax, single_pca: dict, baskets: dict, title: str):
 
 
 def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
+    """Top-level renderer; dispatches by parquet schema.
+
+    Parquets carrying a `k` column come from `bazaar bench scaling` and are
+    routed to the basket-pruning curve renderer; everything else is the
+    basket-vs-singles strip-plot.
+    """
     figs_dir.mkdir(parents=True, exist_ok=True)
     df = pl.read_parquet(data)
     print(f"Loaded {len(df)} rows from {data}")
+    if "k" in df.columns:
+        render_scaling_plot(df, figs_dir, suffix)
+    else:
+        render_basket_vs_singles_plot(df, figs_dir, suffix)
 
+
+def render_basket_vs_singles_plot(
+    df: pl.DataFrame, figs_dir: Path, suffix: str = "",
+) -> None:
     stats_lines = [
         f"{'modality':<6}{'property':<10}"
         f"{'mcca_whitened':>22}{'concat_pca':>22}"
@@ -161,3 +175,194 @@ def render_plots(data: Path, figs_dir: Path, suffix: str = "") -> None:
     txt_path.write_text("\n".join(stats_lines) + "\n")
     print(f"Wrote {txt_path}")
     print("\n" + "\n".join(stats_lines))
+
+
+# ---------------------------------------------------------------------------
+# Scaling plot (basket pruning curves)
+# ---------------------------------------------------------------------------
+
+SCALING_KINDS = ("random", "one_per_family")
+SCALING_KIND_STYLE = {
+    "random":         dict(marker="o", linestyle="-",  label_suffix="random"),
+    "one_per_family": dict(marker="s", linestyle="--", label_suffix="one/family"),
+}
+
+
+def _scaling_pivot(
+    df: pl.DataFrame, modality: str, prop: str, source: str,
+) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """For one (modality, property, source), build {subset_kind: (ks, means, stds)}.
+
+    Means and stds are taken over the joint (subset_id, seed) population at
+    each k. Only `random` and `one_per_family` are returned; the `full` row
+    at k = max(ks) is folded into both series so the curves terminate cleanly.
+    """
+    sub = df.filter(
+        (pl.col("modality") == modality)
+        & (pl.col("property") == prop)
+        & (pl.col("source") == source)
+    )
+    if sub.is_empty():
+        return {}
+
+    full_rows = sub.filter(pl.col("subset_kind") == "full")
+    out: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    for kind in SCALING_KINDS:
+        kind_rows = sub.filter(pl.col("subset_kind") == kind)
+        if kind_rows.is_empty() and full_rows.is_empty():
+            continue
+        joined = pl.concat([kind_rows, full_rows]) if not full_rows.is_empty() else kind_rows
+        agg = (
+            joined.group_by("k")
+            .agg([
+                pl.col("r2").mean().alias("mean"),
+                pl.col("r2").std(ddof=0).fill_null(0.0).alias("std"),
+            ])
+            .sort("k")
+        )
+        ks = agg["k"].to_numpy()
+        means = agg["mean"].to_numpy()
+        stds = agg["std"].to_numpy()
+        out[kind] = (ks, means, stds)
+    return out
+
+
+def _singles_ref(df: pl.DataFrame, modality: str, prop: str) -> tuple[float, float]:
+    """(best_single_mean, median_single_mean) across all single-model rows."""
+    singles = df.filter(
+        (pl.col("modality") == modality)
+        & (pl.col("property") == prop)
+        & (pl.col("source").str.starts_with("single_"))
+    )
+    if singles.is_empty():
+        return float("nan"), float("nan")
+    per_model = (
+        singles.group_by("source")
+        .agg(pl.col("r2").mean().alias("mean"))
+    )
+    means = per_model["mean"].to_numpy()
+    return float(means.max()), float(np.median(means))
+
+
+def _plot_scaling_panel(
+    ax, df: pl.DataFrame, modality: str, prop: str, title: str,
+) -> None:
+    any_curve = False
+    for source in BASKET_SOURCES:
+        per_kind = _scaling_pivot(df, modality, prop, source)
+        style = BASKET_STYLE.get(source, {"color": "k", "label": source})
+        for kind, (ks, means, stds) in per_kind.items():
+            ks_style = SCALING_KIND_STYLE[kind]
+            label = f"{style['label']} ({ks_style['label_suffix']})"
+            ax.errorbar(
+                ks, means, yerr=stds,
+                color=style["color"],
+                marker=ks_style["marker"], linestyle=ks_style["linestyle"],
+                ms=5, capsize=2, capthick=0.7, elinewidth=0.7, lw=1.2,
+                label=label,
+            )
+            any_curve = True
+
+    best, median = _singles_ref(df, modality, prop)
+    if np.isfinite(best):
+        ax.axhline(best, color="#2ca02c", lw=1.0, ls=":",
+                   label=f"best single = {best:.3f}")
+    if np.isfinite(median):
+        ax.axhline(median, color="#7f7f7f", lw=1.0, ls="--",
+                   label=f"median single = {median:.3f}")
+
+    ax.set_xlabel("basket size $k$")
+    ax.set_ylabel("$R^2$")
+    ax.set_title(title, fontsize=11)
+    ax.grid(True, alpha=0.3)
+    if any_curve:
+        ks_all = sorted({
+            int(x) for x in df.filter(pl.col("k").is_not_null())["k"].unique()
+        })
+        ax.set_xticks(ks_all)
+
+
+def render_scaling_plot(
+    df: pl.DataFrame, figs_dir: Path, suffix: str = "",
+) -> None:
+    """Per-cell scaling curves: R² vs basket size k, random vs one-per-family."""
+    modalities = sorted(df["modality"].unique().to_list())
+    properties = [p for p in PROPERTIES if p in df["property"].unique().to_list()]
+
+    stats_lines = [
+        f"{'modality':<6}{'property':<10}{'source':<22}"
+        f"{'kind':<16}{'k':>4}{'mean_r2':>12}{'std_r2':>10}{'n':>5}"
+    ]
+    long_rows = (
+        df.filter(pl.col("k").is_not_null())
+        .group_by(["modality", "property", "source", "subset_kind", "k"])
+        .agg([
+            pl.col("r2").mean().alias("mean_r2"),
+            pl.col("r2").std(ddof=0).fill_null(0.0).alias("std_r2"),
+            pl.col("r2").len().alias("n"),
+        ])
+        .sort(["modality", "property", "source", "subset_kind", "k"])
+    )
+    for row in long_rows.iter_rows(named=True):
+        stats_lines.append(
+            f"{row['modality']:<6}{row['property']:<10}"
+            f"{row['source']:<22}{row['subset_kind']:<16}"
+            f"{int(row['k']):>4d}{row['mean_r2']:>12.4f}"
+            f"{row['std_r2']:>10.4f}{int(row['n']):>5d}"
+        )
+    for modality in modalities:
+        for prop in properties:
+            best, median = _singles_ref(df, modality, prop)
+            stats_lines.append(
+                f"{modality:<6}{prop:<10}{'best_single':<22}"
+                f"{'reference':<16}{'-':>4}{best:>12.4f}{0.0:>10.4f}{0:>5d}"
+            )
+            stats_lines.append(
+                f"{modality:<6}{prop:<10}{'median_single':<22}"
+                f"{'reference':<16}{'-':>4}{median:>12.4f}{0.0:>10.4f}{0:>5d}"
+            )
+
+    pdf_path = figs_dir / f"scaling_curves{suffix}.pdf"
+    with PdfPages(pdf_path) as pdf:
+        for modality in modalities:
+            for prop in properties:
+                fig, ax = plt.subplots(figsize=(8, 5.5))
+                _plot_scaling_panel(
+                    ax, df, modality, prop,
+                    title=(f"{modality.upper()} — {PROPERTY_LABELS.get(prop, prop)}: "
+                           f"basket size scaling"),
+                )
+                ax.legend(loc="lower right", fontsize=7)
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+    print(f"Wrote {pdf_path}")
+
+    n_rows, n_cols = len(modalities), len(properties)
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(6.5 * n_cols, 4.5 * n_rows),
+        sharey=False, sharex=False, squeeze=False,
+    )
+    for i, modality in enumerate(modalities):
+        for j, prop in enumerate(properties):
+            _plot_scaling_panel(
+                axes[i, j], df, modality, prop,
+                title=f"{modality.upper()} — {PROPERTY_LABELS.get(prop, prop)}",
+            )
+            if i == 0 and j == 0:
+                axes[i, j].legend(loc="lower right", fontsize=6)
+    fig.suptitle(
+        "Basket pruning curves — $R^2$ vs basket size $k$, "
+        "random vs one-per-family",
+        fontsize=13,
+    )
+    fig.tight_layout()
+    sum_path = figs_dir / f"scaling_curves_summary{suffix}.pdf"
+    fig.savefig(sum_path)
+    plt.close(fig)
+    print(f"Wrote {sum_path}")
+
+    txt_path = figs_dir / f"scaling_curves_stats{suffix}.txt"
+    txt_path.write_text("\n".join(stats_lines) + "\n")
+    print(f"Wrote {txt_path}")

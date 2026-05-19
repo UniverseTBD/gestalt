@@ -133,6 +133,53 @@ def cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_ks(s: str) -> list[int]:
+    """Parse a comma-separated `--ks` argument (e.g. '2,4,8,16,22')."""
+    out = [int(tok) for tok in s.split(",") if tok.strip()]
+    if not out:
+        raise argparse.ArgumentTypeError("--ks must list at least one k")
+    if any(k <= 0 for k in out):
+        raise argparse.ArgumentTypeError("--ks values must be positive")
+    return out
+
+
+def cmd_bench_scaling(args: argparse.Namespace) -> int:
+    from bazaar.bench.cosmosweb import catalog_pass  # local: heavy imports
+    from bazaar.bench.scaling import run_scaling_cosmos
+
+    args.emb_dir.mkdir(parents=True, exist_ok=True)
+    telescopes = ["hsc", "jwst"]
+    ensure_embeddings_downloaded(BASKET, telescopes, args.emb_dir,
+                                 args.stream_script)
+    params = catalog_pass(args.n_use)
+    print({k: (v.shape, float(np.isfinite(v).mean()))
+           for k, v in params.items()})
+
+    all_rows: list[dict] = []
+    for tele in telescopes:
+        all_rows.extend(run_scaling_cosmos(
+            tele, params, BASKET,
+            D=args.D, ks=args.ks,
+            n_random_per_k=args.n_random_per_k,
+            n_one_per_family=args.n_one_per_family,
+            n_seeds=args.n_seeds,
+            n_use=args.n_use, test_size=args.test_size,
+            emb_dir=args.emb_dir,
+            whiten_mode=args.whiten,
+            subset_seed=args.subset_seed,
+        ))
+
+    df = (
+        pl.DataFrame(all_rows)
+        .with_columns(pl.lit(args.D).alias("D"))
+        .with_columns(pl.lit(args.whiten).alias("whiten_mode"))
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.scaling] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
 def cmd_bench_gz10(args: argparse.Namespace) -> int:
     from bazaar.bench.gz10 import run_gz10  # local: heavy imports (datasets, torch)
 
@@ -256,6 +303,32 @@ def main(argv: list[str] | None = None) -> int:
         split_help="Default is the 86k test split; pass 'train' for the full 8.5M.",
     )
     galaxies_p.set_defaults(func=cmd_bench_galaxies)
+
+    scaling_p = bench_sub.add_parser(
+        "scaling",
+        help="Basket pruning curves on COSMOS-Web — sweep R² vs basket size k "
+             "under random and one-per-family subset selection.",
+    )
+    _add_cosmos_bench_args(scaling_p)
+    scaling_p.add_argument(
+        "--ks", type=_parse_ks, default=_parse_ks("2,4,8,16,22"),
+        help="Comma-separated basket sizes (default: 2,4,8,16,22). "
+             "k == len(basket) is always evaluated as the single 'full' subset.",
+    )
+    scaling_p.add_argument(
+        "--n-random-per-k", type=int, default=5,
+        help="Random subset draws per k (default: 5). Ignored at k == len(basket).",
+    )
+    scaling_p.add_argument(
+        "--n-one-per-family", type=int, default=5,
+        help="One-per-family subset draws per k (default: 5). "
+             "Skipped when k > n_families.",
+    )
+    scaling_p.add_argument(
+        "--subset-seed", type=int, default=0,
+        help="Base seed for subset draws; (k, kind) offsets are added.",
+    )
+    scaling_p.set_defaults(func=cmd_bench_scaling)
 
     plot_p = sub.add_parser("plot", help="Render plots + stats from a bench parquet")
     plot_p.add_argument("--data", type=Path, required=True)
