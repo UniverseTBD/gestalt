@@ -170,7 +170,7 @@ def cmd_bench_scaling(args: argparse.Namespace) -> int:
         ))
 
     df = (
-        pl.DataFrame(all_rows)
+        pl.DataFrame(all_rows, infer_schema_length=None)
         .with_columns(pl.lit(args.D).alias("D"))
         .with_columns(pl.lit(args.whiten).alias("whiten_mode"))
     )
@@ -316,12 +316,13 @@ def main(argv: list[str] | None = None) -> int:
              "k == len(basket) is always evaluated as the single 'full' subset.",
     )
     scaling_p.add_argument(
-        "--n-random-per-k", type=int, default=5,
-        help="Random subset draws per k (default: 5). Ignored at k == len(basket).",
+        "--n-random-per-k", type=int, default=1,
+        help="Random subset draws per k (default: 1, no error bars). "
+             "Ignored at k == len(basket).",
     )
     scaling_p.add_argument(
-        "--n-one-per-family", type=int, default=5,
-        help="One-per-family subset draws per k (default: 5). "
+        "--n-one-per-family", type=int, default=1,
+        help="One-per-family subset draws per k (default: 1, no error bars). "
              "Skipped when k > n_families.",
     )
     scaling_p.add_argument(
