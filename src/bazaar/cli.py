@@ -181,6 +181,42 @@ def cmd_bench_scaling(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench_dims(args: argparse.Namespace) -> int:
+    from bazaar.bench.dimensions import run_dimensions_cosmos  # local: heavy imports
+
+    args.emb_dir.mkdir(parents=True, exist_ok=True)
+    telescopes = ("hsc", "jwst")
+    ensure_embeddings_downloaded(BASKET, list(telescopes), args.emb_dir,
+                                 args.stream_script)
+    rows = run_dimensions_cosmos(
+        D=args.D, n_use=args.n_use,
+        emb_dir=args.emb_dir, telescopes=telescopes, seed=args.seed,
+    )
+    df = pl.DataFrame(rows, infer_schema_length=None)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.dims] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
+def cmd_bench_probes(args: argparse.Namespace) -> int:
+    from bazaar.bench.probes import run_probes_cosmos  # local: heavy imports
+
+    args.emb_dir.mkdir(parents=True, exist_ok=True)
+    telescopes = ("hsc", "jwst")
+    ensure_embeddings_downloaded(BASKET, list(telescopes), args.emb_dir,
+                                 args.stream_script)
+    rows = run_probes_cosmos(
+        D=args.D, n_use=args.n_use,
+        emb_dir=args.emb_dir, telescopes=telescopes, seed=args.seed,
+    )
+    df = pl.DataFrame(rows, infer_schema_length=None)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(args.out)
+    print(f"\n[bazaar.probes] Wrote {len(df)} rows → {args.out}")
+    return 0
+
+
 def cmd_bench_gz10(args: argparse.Namespace) -> int:
     from bazaar.bench.gz10 import run_gz10  # local: heavy imports (datasets, torch)
 
@@ -388,6 +424,52 @@ def main(argv: list[str] | None = None) -> int:
         help="Base seed for subset draws; (k, kind) offsets are added.",
     )
     scaling_p.set_defaults(func=cmd_bench_scaling)
+
+    dims_p = bench_sub.add_parser(
+        "dims",
+        help="Per-dimension covariate decomposition on COSMOS-Web — what does "
+             "each Bazaar latent coordinate encode? Emits a long-form "
+             "(modality, dim, covariate, r2) parquet.",
+    )
+    dims_p.add_argument("--D", type=int, default=1024,
+                        help="Shared latent dimensionality (default: 1024).")
+    dims_p.add_argument("--n-use", type=int, default=45_000,
+                        help="Rows to load per modality (default: 45000).")
+    dims_p.add_argument("--seed", type=int, default=0,
+                        help="Seed for BazaarFit.fit (default: 0).")
+    dims_p.add_argument("--out", type=Path, required=True,
+                        help="Output parquet path.")
+    dims_p.add_argument("--emb-dir", type=Path, default=Path("embeds"),
+                        help="Where the per-model .npy embedding cache lives "
+                             "(default: ./embeds).")
+    dims_p.add_argument("--stream-script", type=Path,
+                        default=Path(__file__).resolve().parents[2]
+                        / "scripts" / "stream_embeddings_to_npy.py",
+                        help="Path to the embedding downloader script.")
+    dims_p.set_defaults(func=cmd_bench_dims)
+
+    probes_p = bench_sub.add_parser(
+        "probes",
+        help="Per-modality 3×3 probe-direction cosine matrices on COSMOS-Web "
+             "(PU Fig 4 replication). Emits (modality, source, prop_i, prop_j, "
+             "cos) for Bazaar S, each basket member, and basket-avg.",
+    )
+    probes_p.add_argument("--D", type=int, default=1024,
+                          help="Shared latent dimensionality (default: 1024).")
+    probes_p.add_argument("--n-use", type=int, default=45_000,
+                          help="Rows to load per modality (default: 45000).")
+    probes_p.add_argument("--seed", type=int, default=0,
+                          help="Seed for BazaarFit.fit (default: 0).")
+    probes_p.add_argument("--out", type=Path, required=True,
+                          help="Output parquet path.")
+    probes_p.add_argument("--emb-dir", type=Path, default=Path("embeds"),
+                          help="Where the per-model .npy embedding cache lives "
+                               "(default: ./embeds).")
+    probes_p.add_argument("--stream-script", type=Path,
+                          default=Path(__file__).resolve().parents[2]
+                          / "scripts" / "stream_embeddings_to_npy.py",
+                          help="Path to the embedding downloader script.")
+    probes_p.set_defaults(func=cmd_bench_probes)
 
     transfer_p = bench_sub.add_parser(
         "transfer",

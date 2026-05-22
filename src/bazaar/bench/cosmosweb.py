@@ -51,6 +51,135 @@ def catalog_pass(n_use: int) -> dict[str, np.ndarray]:
     return {p: np.array(v, dtype=np.float32) for p, v in bucket.items()}
 
 
+# ---------------------------------------------------------------------------
+# Wide catalog pass used by `bazaar bench dims`.
+# ---------------------------------------------------------------------------
+#
+# The basic `catalog_pass` only pulls (z, mass, sSFR). For the per-dimension
+# covariate decomposition (`bench dims`) we need a much wider set of physical,
+# photometric, morphological, systematic, and positional covariates. Grouping
+# is exposed alongside the covariate values so the heatmap can render rows in
+# their natural blocks.
+
+# (covariate_name, dataset_column) — direct one-to-one pulls.
+_WIDE_DIRECT_COLUMNS: dict[str, tuple[str, str]] = {
+    # group, column
+    "z":              ("physics",     "lephare_photozs"),
+    "log_M_star":     ("physics",     "lp_mass"),
+    "log_SFR":        ("physics",     "lp_sfr"),
+    "log_sSFR":       ("physics",     "lp_ssfr"),
+    "log_age":        ("physics",     "lp_age"),
+    "mag_u":          ("photometry",  "mag_model_cfht-u"),
+    "mag_g":          ("photometry",  "mag_model_hsc-g"),
+    "mag_r":          ("photometry",  "mag_model_hsc-r"),
+    "mag_i":          ("photometry",  "mag_model_hsc-i"),
+    "mag_z":          ("photometry",  "mag_model_hsc-z"),
+    "mag_y":          ("photometry",  "mag_model_hsc-y"),
+    "mag_F115W":      ("photometry",  "mag_model_f115w"),
+    "mag_F150W":      ("photometry",  "mag_model_f150w"),
+    "mag_F277W":      ("photometry",  "mag_model_f277w"),
+    "mag_F444W":      ("photometry",  "mag_model_f444w"),
+    "bulge_radius":   ("morphology",  "bulge_radius"),
+    "disk_radius":    ("morphology",  "disk_radius"),
+    "specz_conf":     ("systematics", "Confidence_level"),
+    "ra":             ("position",    "ra"),
+    "dec":            ("position",    "dec"),
+}
+
+# (numerator_column, denominator_column) for SNR proxies — one per band.
+_WIDE_SNR_BANDS: list[tuple[str, str]] = [
+    ("u",     "cfht-u"),
+    ("g",     "hsc-g"),
+    ("r",     "hsc-r"),
+    ("i",     "hsc-i"),
+    ("z",     "hsc-z"),
+    ("y",     "hsc-y"),
+    ("F115W", "f115w"),
+    ("F150W", "f150w"),
+    ("F277W", "f277w"),
+    ("F444W", "f444w"),
+]
+
+# (covariate_name, blue_mag, red_mag) — colors are differences of pulled mags.
+_WIDE_COLOR_PAIRS: list[tuple[str, str, str]] = [
+    ("g_minus_r",        "mag_g",     "mag_r"),
+    ("r_minus_i",        "mag_r",     "mag_i"),
+    ("i_minus_z",        "mag_i",     "mag_z"),
+    ("i_minus_y",        "mag_i",     "mag_y"),
+    ("F115W_minus_F150W","mag_F115W", "mag_F150W"),
+    ("F150W_minus_F277W","mag_F150W", "mag_F277W"),
+    ("F277W_minus_F444W","mag_F277W", "mag_F444W"),
+    ("u_minus_F444W",    "mag_u",     "mag_F444W"),
+]
+
+
+def catalog_pass_wide(n_use: int) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """Stream the dataset once; collect the wide covariate set for `bench dims`.
+
+    Returns
+    -------
+    covariates : dict[str, ndarray]  — values, length n_use each.
+    groups     : dict[str, str]      — covariate_name → covariate_group label.
+    """
+    print(f"[bazaar] Wide catalog pass: streaming {n_use} rows from {DATASET}")
+    ds = load_dataset(DATASET, split="train", streaming=True)
+
+    # Source columns we need to pull from the row dict.
+    raw_cols: set[str] = {col for _, col in _WIDE_DIRECT_COLUMNS.values()}
+    for _, band in _WIDE_SNR_BANDS:
+        raw_cols.add(f"flux_model_{band}")
+        raw_cols.add(f"flux_err-cal_model_{band}")
+    raw_cols.update({"lp_zpdf_l68", "lp_zpdf_u68"})
+
+    bucket: dict[str, list] = {c: [] for c in raw_cols}
+    for row in tqdm(ds, total=n_use, desc="catalog-wide"):
+        for c in raw_cols:
+            bucket[c].append(row[c])
+        if len(bucket[next(iter(raw_cols))]) >= n_use:
+            break
+
+    raw = {c: np.array(v, dtype=np.float32) for c, v in bucket.items()}
+
+    covariates: dict[str, np.ndarray] = {}
+    groups: dict[str, str] = {}
+
+    # 1. Direct columns.
+    for name, (group, col) in _WIDE_DIRECT_COLUMNS.items():
+        covariates[name] = raw[col]
+        groups[name] = group
+
+    # 2. SNR per band: flux / flux_err (clipped at finite values).
+    for tag, band in _WIDE_SNR_BANDS:
+        flux = raw[f"flux_model_{band}"]
+        ferr = raw[f"flux_err-cal_model_{band}"]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            snr = np.where(ferr > 0, flux / ferr, np.nan).astype(np.float32)
+        covariates[f"snr_{tag}"] = snr
+        groups[f"snr_{tag}"] = "systematics"
+
+    # 3. Colors: difference of two pulled magnitudes.
+    for name, blue, red in _WIDE_COLOR_PAIRS:
+        covariates[name] = (covariates[blue] - covariates[red]).astype(np.float32)
+        groups[name] = "color"
+
+    # 4. Morphology derived: log10(bulge / disk) with ε guard.
+    eps = np.float32(1e-6)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_bd = np.log10(covariates["bulge_radius"] + eps) - \
+                 np.log10(covariates["disk_radius"] + eps)
+    covariates["log_bulge_over_disk"] = log_bd.astype(np.float32)
+    groups["log_bulge_over_disk"] = "morphology"
+
+    # 5. zpdf width = u68 - l68.
+    covariates["zpdf_width"] = (raw["lp_zpdf_u68"] - raw["lp_zpdf_l68"]).astype(np.float32)
+    groups["zpdf_width"] = "systematics"
+
+    return covariates, groups
+
+
+__all__ = ["catalog_pass", "catalog_pass_wide", "run_cosmosweb", "PROPERTIES", "CATALOG_COLUMNS"]
+
+
 def run_cosmosweb(
     telescope: str,
     params: dict[str, np.ndarray],
