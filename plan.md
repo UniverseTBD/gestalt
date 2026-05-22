@@ -25,7 +25,7 @@ doesn't exist yet).
    UV_CACHE_DIR=/beegfs/general/mjsmith/.uv_cache \
      uv run bazaar bench probes --D 1024 --out data/probes_1024.parquet
    UV_CACHE_DIR=/beegfs/general/mjsmith/.uv_cache \
-     uv run bazaar plot --data data/probes_1024.parquet --suffix _1024
+     uv run scripts/plot_probe_confusion.py
    ```
    Then delete `data/probes_smoke.parquet` + the `_smoke`-suffixed figs in
    `figs/`.

@@ -49,9 +49,11 @@ are paired two-sided Wilcoxon against the best single per cell.
 ```bash
 bazaar run --D 128 --out data/results_pca128.parquet
 bazaar run --D 256 --out data/results_pca256.parquet
-bazaar plot --data data/results_pca128.parquet --suffix _pca128
-bazaar plot --data data/results_pca256.parquet --suffix _pca256
+uv run scripts/plot_r2_vs_params_cosmos.py
 ```
+
+(Figures are now produced by the standalone `scripts/plot_*.py` family;
+the old `bazaar plot` subcommand has been removed.)
 
 Wall time on a single A100 80 GB: ≈ 12 min per D for both modalities
 (dominated by per-model PCA on the JWST side; MCCA SVD is ~10 s per

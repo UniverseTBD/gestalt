@@ -27,7 +27,7 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 - `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
 - `bazaar bench galaxies --out data/galaxies.parquet` — Smith42/galaxies (v2.0) sweep (13 paper-faithful regression targets).
 - `bazaar bench transfer --target <corpus> --out data/transfer_<corpus>.parquet` — cross-survey generalization (§3.2): for each (target, source) pair fit a `BazaarFit` + `concat→PCA` on the first `--n-fit` rows of source, transform target, probe target's labels. One parquet per target; adds a `fit_source` column to the long-form schema. Defaults: `--D 1024 --n-fit 10000 --n-seeds 5 --sources all`.
-- `bazaar plot --data <parquet> --suffix _pca256` — strip plots, 2×3 summary grid, stats table into `figs/`.
+- Plots are rendered by the standalone `scripts/plot_*.py` (one per sweep), not a `bazaar` subcommand. Run e.g. `uv run scripts/plot_r2_vs_params_cosmos.py` after a sweep has written its parquet under `data/`.
 
 `run`/`fit` infer modality from the input dataset's band list (override with `--modality`); per-model `.npy` embeddings are cached under `./embeds`. There is no `bazaar embed` or `bazaar transform` subcommand — the equivalents are `bazaar.embed.embed_basket` and `BazaarFit.transform` in the Python API.
 
@@ -71,7 +71,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 - `cli.py` — argparse subcommands.
 - `_ingest/` — HF dataset adapters (`hf_streaming`, `gz10`, `galaxies`) that produce `CatalogSource` rows + label streams.
 - `embed/` — per-model embedding pipeline (`embed_basket`), preprocessing, zoom/crop, and model adapters. Vendored from `platonic-universe`.
-- `bench/` — `probe.run_probe` / `run_classification_probe` (linear/logistic probes), three dataset sweeps (`cosmosweb.py`, `gz10.py`, `galaxies.py`) on a shared `_runner.py` (whitening + basket-source construction), and `plotting.py` (render-only). All sweeps emit the same long-form schema: `modality, property, kind, source, seed, r2, acc, f1, n_valid` (NaN where the metric is inapplicable to the probe kind).
+- `bench/` — `probe.run_probe` / `run_classification_probe` (linear/logistic probes) and three dataset sweeps (`cosmosweb.py`, `gz10.py`, `galaxies.py`) on a shared `_runner.py` (whitening + basket-source construction). All sweeps emit the same long-form schema: `modality, property, kind, source, seed, r2, acc, f1, n_valid` (NaN where the metric is inapplicable to the probe kind). Plot rendering is *not* in this package — see the `scripts/plot_*.py` family.
 
 ## Conventions worth knowing
 

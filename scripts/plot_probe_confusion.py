@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""3×3 cosine confusion heatmaps for `bench probes`, restyled.
+"""3×3 cosine confusion heatmaps for `bench probes`.
 
-Mirrors `_plot_probes_heatmap` in `src/bazaar/bench/plotting.py` (3×3
-RdBu_r heatmap with cell text), but lays out the basket-vs-singles
-comparison in a tight 2 (modality) × 3 (source) grid sized to fit the
-cosmos figure family.
+3×3 RdBu_r heatmap with cell text, laid out as a tight
+2 (modality) × 3 (source) grid sized to fit the cosmos figure family.
 
 Columns:
   1. `basket_mcca_whitened` — the canonical Bazaar projection.

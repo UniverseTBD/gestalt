@@ -154,12 +154,13 @@ targets on Smith42/galaxies respectively:
 ```bash
 bazaar bench cosmos --D 256 --out data/results_pca256.parquet \
                     --emb-dir embeds
-bazaar plot         --data data/results_pca256.parquet --suffix _pca256
+uv run scripts/plot_r2_vs_params_cosmos.py
 ```
 
 This writes a 1 500-row long-form parquet (modality × property × seed ×
-{naive, procrustes, mcca, 22×single}) plus per-modality strip plots, a
-2×3 summary grid, and a stats table under `figs/`.
+{naive, procrustes, mcca, 22×single}). The standalone plotting scripts
+under `scripts/plot_*.py` (one per sweep) render the figures into
+`figs/`.
 
 ### Cross-survey generalization (`bazaar bench transfer`)
 

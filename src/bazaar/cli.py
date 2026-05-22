@@ -1,9 +1,8 @@
-"""Bazaar CLI: two user verbs (run / fit), a plot verb, and a bench verb.
+"""Bazaar CLI: two user verbs (run / fit) and a bench verb.
 
 - `bazaar run   <input>`            — embed + transform via shipped or supplied fit
 - `bazaar fit   <input>`            — embed + fit a fresh BazaarFit
 - `bazaar bench {cosmos,gz10,galaxies} ...` — the dataset benchmark sweeps
-- `bazaar plot  --data <parquet>`   — render plots from a bench parquet
 """
 from __future__ import annotations
 
@@ -16,7 +15,6 @@ import polars as pl
 from bazaar import api
 from bazaar.basket import BASKET, ensure_embeddings_downloaded
 from bazaar.bench.cosmosweb import catalog_pass, run_cosmosweb
-from bazaar.bench.plotting import render_plots
 
 # ---------------------------------------------------------------------------
 # Public verbs (run / fit)
@@ -126,11 +124,6 @@ def cmd_bench_cosmos(args: argparse.Namespace) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(args.out)
     print(f"\n[bazaar] Wrote {len(df)} rows → {args.out}")
-    return 0
-
-
-def cmd_plot(args: argparse.Namespace) -> int:
-    render_plots(args.data, args.figs_dir, args.suffix)
     return 0
 
 
@@ -525,12 +518,6 @@ def main(argv: list[str] | None = None) -> int:
     transfer_p.add_argument("--out", type=Path, required=True,
                             help="Output parquet path (one per target).")
     transfer_p.set_defaults(func=cmd_bench_transfer)
-
-    plot_p = sub.add_parser("plot", help="Render plots + stats from a bench parquet")
-    plot_p.add_argument("--data", type=Path, required=True)
-    plot_p.add_argument("--suffix", type=str, default="")
-    plot_p.add_argument("--figs-dir", type=Path, default=Path("figs"))
-    plot_p.set_defaults(func=cmd_plot)
 
     args = ap.parse_args(argv)
     return args.func(args)

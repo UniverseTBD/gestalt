@@ -11,10 +11,9 @@ panel per `target`. The reader's eye should pick up two patterns:
      the bottom-right of each panel quantifies on-domain minus
      off-domain MCCA R².
 
-There is no existing figure for `bench transfer` — this is the first.
-Styling matches the cosmos figure family: orange MCCA / cyan concat→PCA
-(from `src/bazaar/bench/plotting.py`), top-of-figure legend, inward
-ticks, grid at alpha 0.25, figsize parallels.
+Styling matches the cosmos figure family: orange MCCA / cyan concat→PCA,
+top-of-figure legend, inward ticks, grid at alpha 0.25, figsize
+parallels.
 """
 from __future__ import annotations
 

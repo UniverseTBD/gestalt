@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Scaling curves: R² vs basket size k for `bench scaling`, restyled.
+"""Scaling curves: R² vs basket size k for `bench scaling`.
 
-Same chart idiom as `bench/plotting.py::render_scaling_plot` (one error-
-bar curve per `subset_kind ∈ {random, one_per_family}`, plus best-single
-and median-single horizontal references), but sized and palette-matched
-to the cosmos figure family:
+One error-bar curve per `subset_kind ∈ {random, one_per_family}`, plus
+best-single and median-single horizontal references. Sized and palette-
+matched to the cosmos figure family:
 
   - figsize `(7.5, 3.0)` for the 2-panel mean figure (cosmos `plot_mean`);
   - figsize `(11, 5.2)` for the 2×3 per-property grid;
-  - orange MCCA basket palette to match `src/bazaar/bench/plotting.py`;
+  - orange MCCA basket palette;
   - top-of-figure dedup legend; inward ticks; grid at alpha 0.25.
 
 Best/median-single references are read from `data/cosmos_1024.parquet`
@@ -38,7 +37,6 @@ PROPERTY_LABEL = {
     "sSFR":     r"sSFR",
 }
 
-# Match src/bazaar/bench/plotting.py.
 BASKET_STYLE = {
     "basket_mcca_whitened": {"label": "Basket (MCCA, whitened)",
                               "color": "#ff7f0e"},
