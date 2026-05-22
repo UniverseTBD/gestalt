@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""COSMOS-Web R² vs model parameter count, with basket averages overlaid.
+"""GZ10 metric vs model parameter count, with basket averages overlaid.
 
-Mirrors the scatter style of `pu/scripts/plot_r2_vs_params.py` (on the
-`crossmodalintramodal` branch): one marker per (family, size), a gray
-log-linear regression line through all single-model points, and a
-Spearman ρ + p annotation. Adds horizontal bands for each basket-fusion
-variant so the single-model scatter can be compared against the basket
-in one frame — that overlay is the bazaar-specific extension.
+Mirrors `plot_r2_vs_params_cosmos.py` (and ultimately the pu plotting
+idiom) but for the `bench gz10` sweep: a 2-panel figure where panel A
+shows R² for the redshift regression target and panel B shows macro-F1
+for the gz10_label classification target. The two task types share one
+basket of single-model points; only the y-axis metric differs.
+
+Per the copy-adapt decision in the plan, this script is intentionally
+self-contained — helpers are pasted from `plot_r2_vs_params_cosmos.py`
+rather than imported, with `_aggregate_per_seed` / `collect_singles` /
+`collect_baskets` generalized to take a `metric` column name so the
+F1 panel can swap r2 → f1 with no other changes.
 """
 from __future__ import annotations
 
@@ -75,15 +80,6 @@ BASKET_STYLE = {
     },
 }
 
-MODALITIES = ["hsc", "jwst"]
-PROPERTIES = ["redshift", "mass", "sSFR"]
-MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
-PROPERTY_LABEL = {
-    "redshift": r"$z_{\rm phot}$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     r"sSFR",
-}
-
 
 def parse_single(source: str) -> tuple[str, str] | None:
     """Split `single_<family>_<size>_pca<D>` into (family, size).
@@ -102,9 +98,12 @@ def parse_single(source: str) -> tuple[str, str] | None:
     return family, size
 
 
-def _aggregate_per_seed(sub: pd.DataFrame) -> tuple[float, float, int]:
-    """Mean ± SE of per-seed R² (averaged over whatever properties are in `sub`)."""
-    per_seed = sub.groupby("seed")["r2"].mean().to_numpy()
+def _aggregate_per_seed(
+    sub: pd.DataFrame, metric: str = "r2"
+) -> tuple[float, float, int]:
+    """Mean ± SE of per-seed `metric` (averaged over whatever properties are in `sub`)."""
+    per_seed = sub.groupby("seed")[metric].mean().to_numpy()
+    per_seed = per_seed[np.isfinite(per_seed)]
     n = len(per_seed)
     if n == 0:
         return float("nan"), float("nan"), 0
@@ -113,24 +112,28 @@ def _aggregate_per_seed(sub: pd.DataFrame) -> tuple[float, float, int]:
     return mean, se, n
 
 
-def collect_singles(df: pd.DataFrame) -> dict[tuple[str, str], tuple[float, float]]:
+def collect_singles(
+    df: pd.DataFrame, metric: str = "r2"
+) -> dict[tuple[str, str], tuple[float, float]]:
     out: dict[tuple[str, str], tuple[float, float]] = {}
     for src in df["source"].unique():
         parsed = parse_single(src)
         if parsed is None:
             continue
-        m, se, n = _aggregate_per_seed(df[df["source"] == src])
+        m, se, n = _aggregate_per_seed(df[df["source"] == src], metric=metric)
         if n:
             out[parsed] = (m, se)
     return out
 
 
-def collect_baskets(df: pd.DataFrame) -> dict[str, tuple[float, float]]:
+def collect_baskets(
+    df: pd.DataFrame, metric: str = "r2"
+) -> dict[str, tuple[float, float]]:
     out: dict[str, tuple[float, float]] = {}
     for src in df["source"].unique():
         if not src.startswith("basket_"):
             continue
-        m, se, n = _aggregate_per_seed(df[df["source"] == src])
+        m, se, n = _aggregate_per_seed(df[df["source"] == src], metric=metric)
         if n:
             out[src] = (m, se)
     return out
@@ -150,11 +153,7 @@ def _plot_singles_scatter(
     annotate: bool = True,
     fit_line: bool = True,
 ) -> dict | None:
-    """Scatter one marker per (family, size); overlay log-linear trend + ρ.
-
-    Returns ``{"slope", "intercept"}`` so callers can solve the trend for the
-    equivalent-N at each basket's R² using the same fit drawn here.
-    """
+    """Scatter one marker per (family, size); overlay log-linear trend + ρ."""
     xs_all, ys_all = [], []
     for family, params_by_size in PARAM_COUNTS.items():
         xs, ys = [], []
@@ -231,17 +230,36 @@ def _dedup_legend(axes) -> tuple[list, list]:
     return list(seen.values()), list(seen.keys())
 
 
-def plot_mean(df: pd.DataFrame) -> None:
-    """One panel per modality; y = R² averaged across the 3 COSMOS properties."""
+PANELS = [
+    {
+        "property": "redshift",
+        "kind": "regression",
+        "metric": "r2",
+        "ylabel": r"$R^2$",
+        "title": r"redshift ($R^2$)",
+    },
+    {
+        "property": "gz10_label",
+        "kind": "classification",
+        "metric": "f1",
+        "ylabel": "F1 (macro)",
+        "title": "GZ10 class (F1)",
+    },
+]
+
+
+def plot_two_panel(df: pd.DataFrame) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.0), sharey=False)
-    for ax, modality in zip(axes, MODALITIES):
-        sub = df[df["modality"] == modality]
-        _plot_singles_scatter(ax, collect_singles(sub))
-        _plot_baskets(ax, collect_baskets(sub))
-        ax.set_title(MODALITY_LABEL[modality], fontsize=11)
+    for ax, panel in zip(axes, PANELS):
+        sub = df[
+            (df["property"] == panel["property"])
+            & (df["kind"] == panel["kind"])
+        ]
+        _plot_singles_scatter(ax, collect_singles(sub, metric=panel["metric"]))
+        _plot_baskets(ax, collect_baskets(sub, metric=panel["metric"]))
+        ax.set_title(panel["title"], fontsize=11)
         ax.set_xlabel("Parameters", fontsize=10)
-        if ax is axes[0]:
-            ax.set_ylabel(r"Mean $R^2$", fontsize=10)
+        ax.set_ylabel(panel["ylabel"], fontsize=10)
         _inward_ticks(ax)
 
     handles, labels = _dedup_legend(axes)
@@ -253,42 +271,8 @@ def plot_mean(df: pd.DataFrame) -> None:
     )
 
     fig.tight_layout()
-    plt.subplots_adjust(wspace=0.22)
-    out = FIGS / "cosmos_r2_vs_model_size.pdf"
-    fig.savefig(out, dpi=300, bbox_inches="tight")
-    print(f"Saved {out}")
-    plt.close(fig)
-
-
-def plot_per_property(df: pd.DataFrame) -> None:
-    """2 (modality) × 3 (property) grid in the same scatter idiom."""
-    fig, axes = plt.subplots(2, 3, figsize=(11, 5.2), sharex=True)
-    for r, modality in enumerate(MODALITIES):
-        for c, prop in enumerate(PROPERTIES):
-            ax = axes[r, c]
-            sub = df[(df["modality"] == modality) & (df["property"] == prop)]
-            _plot_singles_scatter(ax, collect_singles(sub), markersize=22)
-            _plot_baskets(ax, collect_baskets(sub))
-            ax.set_title(f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}",
-                         fontsize=10)
-            if c == 0:
-                ax.set_ylabel(r"$R^2$", fontsize=9)
-            if r == 1:
-                ax.set_xlabel("Parameters", fontsize=9)
-            ax.tick_params(labelsize=8)
-            _inward_ticks(ax)
-
-    handles, labels = _dedup_legend(axes.flat)
-    fig.legend(
-        handles, labels,
-        loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
-        columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.5, 1.04), frameon=False,
-    )
-
-    fig.tight_layout()
-    plt.subplots_adjust(wspace=0.22, hspace=0.28)
-    out = FIGS / "cosmos_r2_vs_model_size_per_property.pdf"
+    plt.subplots_adjust(wspace=0.28)
+    out = FIGS / "gz10_r2_vs_model_size.pdf"
     fig.savefig(out, dpi=300, bbox_inches="tight")
     print(f"Saved {out}")
     plt.close(fig)
@@ -296,9 +280,8 @@ def plot_per_property(df: pd.DataFrame) -> None:
 
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
-    df = pd.read_parquet(DATA / "cosmos_1024.parquet")
-    plot_mean(df)
-    plot_per_property(df)
+    df = pd.read_parquet(DATA / "results_pca1024_gz10.parquet")
+    plot_two_panel(df)
 
 
 if __name__ == "__main__":

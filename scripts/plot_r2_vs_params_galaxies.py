@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""COSMOS-Web R² vs model parameter count, with basket averages overlaid.
+"""Smith42/galaxies R² vs model parameter count, with basket averages overlaid.
 
-Mirrors the scatter style of `pu/scripts/plot_r2_vs_params.py` (on the
-`crossmodalintramodal` branch): one marker per (family, size), a gray
-log-linear regression line through all single-model points, and a
-Spearman ρ + p annotation. Adds horizontal bands for each basket-fusion
-variant so the single-model scatter can be compared against the basket
-in one frame — that overlay is the bazaar-specific extension.
+Two figures:
+
+  - `galaxies_r2_vs_model_size.pdf`: a single-panel scatter where y is
+    the per-seed R² averaged across all 13 paper-faithful regression
+    targets. Mirrors the cosmos `plot_mean` style but single-panel since
+    `bench galaxies` has only one modality (legacysurvey).
+  - `galaxies_r2_vs_model_size_per_property.pdf`: 3 × 5 grid with one
+    panel per property (13 used, 2 hidden) in parquet order so it is
+    easy to cross-reference the galaxies LaTeX table.
+
+Self-contained — helpers are pasted from `plot_r2_vs_params_cosmos.py`
+rather than imported, per the copy-adapt decision.
 """
 from __future__ import annotations
 
@@ -75,23 +81,35 @@ BASKET_STYLE = {
     },
 }
 
-MODALITIES = ["hsc", "jwst"]
-PROPERTIES = ["redshift", "mass", "sSFR"]
-MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
+# Trimmed from scripts/gen_latex_tables.py PROPERTY_LABEL, keyed by the
+# 13 galaxies properties.
 PROPERTY_LABEL = {
-    "redshift": r"$z_{\rm phot}$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     r"sSFR",
+    "artifact":     r"artifact",
+    "disc":         r"disc",
+    "edge_on":      r"edge-on",
+    "g_minus_r":    r"$g{-}r$",
+    "log_mstar":    r"$\log M_\star$",
+    "mag_abs_g":    r"$M_g$",
+    "mag_abs_z":    r"$M_z$",
+    "mean_ssfr":    r"sSFR",
+    "photo_z":      r"$z_{\rm phot}$",
+    "r_minus_z":    r"$r{-}z$",
+    "smooth":       r"smooth",
+    "spec_z":       r"$z_{\rm spec}$",
+    "tight_spiral": r"tight spiral",
 }
+
+# Parquet order, used for the per-property grid layout (matches the
+# table in figs/galaxies_table.tex).
+PROPERTY_ORDER = [
+    "artifact", "disc", "edge_on", "g_minus_r", "log_mstar",
+    "mag_abs_g", "mag_abs_z", "mean_ssfr", "photo_z", "r_minus_z",
+    "smooth", "spec_z", "tight_spiral",
+]
 
 
 def parse_single(source: str) -> tuple[str, str] | None:
-    """Split `single_<family>_<size>_pca<D>` into (family, size).
-
-    `llava_15` is the only family whose name contains an underscore, so we
-    rsplit once on `_` after stripping the prefix/suffix — that puts the
-    underscore back into the family token.
-    """
+    """Split `single_<family>_<size>_pca<D>` into (family, size)."""
     if not source.startswith("single_"):
         return None
     core = source.removeprefix("single_")
@@ -102,9 +120,12 @@ def parse_single(source: str) -> tuple[str, str] | None:
     return family, size
 
 
-def _aggregate_per_seed(sub: pd.DataFrame) -> tuple[float, float, int]:
-    """Mean ± SE of per-seed R² (averaged over whatever properties are in `sub`)."""
-    per_seed = sub.groupby("seed")["r2"].mean().to_numpy()
+def _aggregate_per_seed(
+    sub: pd.DataFrame, metric: str = "r2"
+) -> tuple[float, float, int]:
+    """Mean ± SE of per-seed `metric` (averaged over whatever properties are in `sub`)."""
+    per_seed = sub.groupby("seed")[metric].mean().to_numpy()
+    per_seed = per_seed[np.isfinite(per_seed)]
     n = len(per_seed)
     if n == 0:
         return float("nan"), float("nan"), 0
@@ -113,24 +134,28 @@ def _aggregate_per_seed(sub: pd.DataFrame) -> tuple[float, float, int]:
     return mean, se, n
 
 
-def collect_singles(df: pd.DataFrame) -> dict[tuple[str, str], tuple[float, float]]:
+def collect_singles(
+    df: pd.DataFrame, metric: str = "r2"
+) -> dict[tuple[str, str], tuple[float, float]]:
     out: dict[tuple[str, str], tuple[float, float]] = {}
     for src in df["source"].unique():
         parsed = parse_single(src)
         if parsed is None:
             continue
-        m, se, n = _aggregate_per_seed(df[df["source"] == src])
+        m, se, n = _aggregate_per_seed(df[df["source"] == src], metric=metric)
         if n:
             out[parsed] = (m, se)
     return out
 
 
-def collect_baskets(df: pd.DataFrame) -> dict[str, tuple[float, float]]:
+def collect_baskets(
+    df: pd.DataFrame, metric: str = "r2"
+) -> dict[str, tuple[float, float]]:
     out: dict[str, tuple[float, float]] = {}
     for src in df["source"].unique():
         if not src.startswith("basket_"):
             continue
-        m, se, n = _aggregate_per_seed(df[df["source"] == src])
+        m, se, n = _aggregate_per_seed(df[df["source"] == src], metric=metric)
         if n:
             out[src] = (m, se)
     return out
@@ -150,11 +175,6 @@ def _plot_singles_scatter(
     annotate: bool = True,
     fit_line: bool = True,
 ) -> dict | None:
-    """Scatter one marker per (family, size); overlay log-linear trend + ρ.
-
-    Returns ``{"slope", "intercept"}`` so callers can solve the trend for the
-    equivalent-N at each basket's R² using the same fit drawn here.
-    """
     xs_all, ys_all = [], []
     for family, params_by_size in PARAM_COUNTS.items():
         xs, ys = [], []
@@ -232,63 +252,60 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 
 def plot_mean(df: pd.DataFrame) -> None:
-    """One panel per modality; y = R² averaged across the 3 COSMOS properties."""
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.0), sharey=False)
-    for ax, modality in zip(axes, MODALITIES):
-        sub = df[df["modality"] == modality]
-        _plot_singles_scatter(ax, collect_singles(sub))
-        _plot_baskets(ax, collect_baskets(sub))
-        ax.set_title(MODALITY_LABEL[modality], fontsize=11)
-        ax.set_xlabel("Parameters", fontsize=10)
-        if ax is axes[0]:
-            ax.set_ylabel(r"Mean $R^2$", fontsize=10)
-        _inward_ticks(ax)
+    fig, ax = plt.subplots(1, 1, figsize=(4.5, 3.0))
+    _plot_singles_scatter(ax, collect_singles(df))
+    _plot_baskets(ax, collect_baskets(df))
+    ax.set_xlabel("Parameters", fontsize=10)
+    ax.set_ylabel(r"Mean $R^2$", fontsize=10)
+    _inward_ticks(ax)
 
-    handles, labels = _dedup_legend(axes)
+    handles, labels = _dedup_legend([ax])
     fig.legend(
         handles, labels,
         loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
         columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.52, 1.12), frameon=False,
+        bbox_to_anchor=(0.52, 1.18), frameon=False,
     )
 
     fig.tight_layout()
-    plt.subplots_adjust(wspace=0.22)
-    out = FIGS / "cosmos_r2_vs_model_size.pdf"
+    out = FIGS / "galaxies_r2_vs_model_size.pdf"
     fig.savefig(out, dpi=300, bbox_inches="tight")
     print(f"Saved {out}")
     plt.close(fig)
 
 
 def plot_per_property(df: pd.DataFrame) -> None:
-    """2 (modality) × 3 (property) grid in the same scatter idiom."""
-    fig, axes = plt.subplots(2, 3, figsize=(11, 5.2), sharex=True)
-    for r, modality in enumerate(MODALITIES):
-        for c, prop in enumerate(PROPERTIES):
-            ax = axes[r, c]
-            sub = df[(df["modality"] == modality) & (df["property"] == prop)]
-            _plot_singles_scatter(ax, collect_singles(sub), markersize=22)
-            _plot_baskets(ax, collect_baskets(sub))
-            ax.set_title(f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}",
-                         fontsize=10)
-            if c == 0:
-                ax.set_ylabel(r"$R^2$", fontsize=9)
-            if r == 1:
-                ax.set_xlabel("Parameters", fontsize=9)
-            ax.tick_params(labelsize=8)
-            _inward_ticks(ax)
+    nrows, ncols = 3, 5
+    fig, axes = plt.subplots(nrows, ncols, figsize=(13, 6.5), sharex=True)
+    for idx, prop in enumerate(PROPERTY_ORDER):
+        r, c = divmod(idx, ncols)
+        ax = axes[r, c]
+        sub = df[df["property"] == prop]
+        _plot_singles_scatter(ax, collect_singles(sub), markersize=22)
+        _plot_baskets(ax, collect_baskets(sub))
+        ax.set_title(PROPERTY_LABEL[prop], fontsize=10)
+        if c == 0:
+            ax.set_ylabel(r"$R^2$", fontsize=9)
+        if r == nrows - 1:
+            ax.set_xlabel("Parameters", fontsize=9)
+        ax.tick_params(labelsize=8)
+        _inward_ticks(ax)
+
+    for idx in range(len(PROPERTY_ORDER), nrows * ncols):
+        r, c = divmod(idx, ncols)
+        axes[r, c].set_visible(False)
 
     handles, labels = _dedup_legend(axes.flat)
     fig.legend(
         handles, labels,
         loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
         columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.5, 1.04), frameon=False,
+        bbox_to_anchor=(0.5, 1.03), frameon=False,
     )
 
     fig.tight_layout()
-    plt.subplots_adjust(wspace=0.22, hspace=0.28)
-    out = FIGS / "cosmos_r2_vs_model_size_per_property.pdf"
+    plt.subplots_adjust(wspace=0.28, hspace=0.32)
+    out = FIGS / "galaxies_r2_vs_model_size_per_property.pdf"
     fig.savefig(out, dpi=300, bbox_inches="tight")
     print(f"Saved {out}")
     plt.close(fig)
@@ -296,7 +313,11 @@ def plot_per_property(df: pd.DataFrame) -> None:
 
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
-    df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = pd.read_parquet(DATA / "results_pca1024_galaxies.parquet")
+    # Guard against future evaluation splits — only the `test` rows are
+    # the held-out scores plotted today.
+    if "split" in df.columns:
+        df = df[df["split"] == "test"]
     plot_mean(df)
     plot_per_property(df)
 

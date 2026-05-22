@@ -11,12 +11,12 @@ doesn't exist yet).
 | `bench cosmos` | `data/cosmos_1024.parquet` | 1024 | done | D=1024 sweep, `pca_zscore` whiten; basket sources are `basket_mcca_whitened` + `basket_concat_pca` |
 | `bench cosmos` (D=256) | `data/results_pca256.parquet` | 256 | done | kept for D comparison |
 | `bench cosmos` (z-score ablation) | `data/results_pca1024_zscore_ablation.parquet` | 1024 | done | `pca_zscore` + `zscore`-only whitener side-by-side |
-| `bench gz10` | `data/results_pca1024_gz10.parquet` | 1024 | done | classification + redshift regression |
-| `bench galaxies` | `data/results_pca1024_galaxies.parquet` | 1024 | done | 13 paper-faithful regression targets |
-| `bench scaling` | `data/scaling.parquet` | 1024 | done | k ∈ {2, 4, 8, 16, 22}, `basket_mcca` only |
-| `bench transfer` | `data/transfer_{cosmos-hsc, cosmos-jwst, gz10, galaxies}.parquet` | 1024 | done | 4×4 target × fit_source matrix; n_fit=10000 |
+| `bench gz10` | `data/results_pca1024_gz10.parquet` | 1024 | done | classification + redshift regression; scatter in `figs/gz10_r2_vs_model_size.pdf` |
+| `bench galaxies` | `data/results_pca1024_galaxies.parquet` | 1024 | done | 13 paper-faithful regression targets; scatter in `figs/galaxies_r2_vs_model_size{,_per_property}.pdf` |
+| `bench scaling` | `data/scaling.parquet` | 1024 | done | k ∈ {2, 4, 8, 16, 22}, `basket_mcca` only; curves in `figs/scaling_curves{,_per_property}.pdf` |
+| `bench transfer` | `data/transfer_{cosmos-hsc, cosmos-jwst, gz10, galaxies}.parquet` | 1024 | done | 4×4 target × fit_source matrix; n_fit=10000; strip plots in `figs/transfer_{r2,f1}_vs_source*.pdf` |
 | `bench dims` | `data/dims.parquet` | 1024 | done | per-dim covariate R²; both modalities |
-| `bench probes` | `data/probes_smoke.parquet` | **256** | **todo** | smoke run only — rerun at D=1024 |
+| `bench probes` | `data/probes_smoke.parquet` | **256** | **todo** | smoke run only — rerun at D=1024; confusion heatmaps in `figs/probes_confusion_smoke.pdf` (will lose `_smoke` suffix after D=1024 rerun) |
 
 ## Outstanding work
 
