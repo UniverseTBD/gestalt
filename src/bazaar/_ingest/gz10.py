@@ -18,6 +18,8 @@ from datasets import load_dataset
 
 from bazaar._ingest.hf_streaming import CatalogSource
 
+# TODO(release): unpinned external dataset — pin a commit revision like
+# `_ingest/galaxies.py` does.
 GZ10_DATASET = "UniverseTBD/mmu_gz10"
 GZ10_MODALITY = "legacysurvey"
 

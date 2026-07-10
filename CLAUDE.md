@@ -23,6 +23,7 @@ Tests run on small synthetic baskets (no network, no HF download) and are fast.
 
 - `bazaar run <input> --fit {<dir>|<hf-repo-id>|default} --out unified.npy` — embed `<input>` through the 22-model basket and apply a saved fit. `--fit default` resolves to the shipped per-modality repo (`api.DEFAULT_FIT_REPOS`); a local dir or any HF model repo id also works (loaded via `BazaarFit.from_pretrained`).
 - `bazaar fit <input> --D 1024 --out fits/<dir>` — embed `<input>` and fit a fresh `BazaarFit` to disk.
+- `bazaar push fits/<dir> <org/repo> [--private]` — publish a saved fit to the HF Hub (wraps `BazaarFit.push_to_hub`; auto-generates a model card from the mixin metadata).
 - `bazaar bench cosmos --D 256 --out data/results_pca256.parquet --emb-dir embeds` — COSMOS-Web sweep (requires pre-cached `.npy` embeddings; downloads via `scripts/stream_embeddings_to_npy.py` on first run).
 - `bazaar bench gz10 --out data/gz10.parquet` — UniverseTBD/mmu_gz10 sweep (classification on `gz10_label` + regression on `redshift`).
 - `bazaar bench galaxies --out data/galaxies.parquet` — Smith42/galaxies (v2.0) sweep (13 paper-faithful regression targets).
@@ -63,7 +64,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 
 **Module roles:**
 
-- `basket.py` — the canonical `BASKET` list (22 (family, size) tuples), HF download glue, `load_embeddings`, and `ensure_default_fit_downloaded` (resolves `--fit default`).
+- `basket.py` — the canonical `BASKET` list (22 (family, size) tuples), HF download glue, and `load_embeddings`. (`--fit default` is resolved in `api._resolve_fit` via `api.DEFAULT_FIT_REPOS`, not here.)
 - `align.py` — `mcca_fit` (returns `V` + fit-time `S`) and `mcca_transform`. Unsupervised; operates on already-whitened per-model features.
 - `whiten.py` — `pca_zscore_fit` / `pca_zscore_transform` (PCA-to-D then per-feature z-score) and `zscore_fit` / `zscore_transform` (no PCA). Tiny and dependency-light so `fit.py` can import it without dragging in the benchmark suite.
 - `fit.py` — the persistent `BazaarFit` dataclass (a `huggingface_hub.ModelHubMixin` subclass). `SCHEMA_VERSION = 5`; bump it if you change the on-disk layout.
@@ -75,7 +76,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 
 ## Conventions worth knowing
 
-- **Basket order is load-bearing.** `V`'s row partitioning is `[Z_1 | … | Z_M]` in `basket` order; `meta.json` pins this so loaders can't misalign. Always pass the basket explicitly when calling `BazaarFit.fit`/`load_embeddings`.
+- **Basket order is load-bearing.** `V`'s row partitioning is `[Z_1 | … | Z_M]` in `basket` order; `config.json` pins this so loaders can't misalign. Always pass the basket explicitly when calling `BazaarFit.fit`/`load_embeddings`.
 - **Row alignment across models is assumed, not checked.** `load_embeddings` slices each `.npy` to `n_use` rows and trusts the upstream ordering from `Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2`.
 - **Float32 throughout.**
 - **Randomized SVD** (sklearn) is used in both PCA and MCCA. Determinism comes from the `seed` arg, not from being exact.

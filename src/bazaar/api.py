@@ -19,6 +19,8 @@ from bazaar.basket import BASKET, basket_signature
 from bazaar.embed import embed_basket
 from bazaar.fit import BazaarFit
 
+# TODO(release): these resolve `main` at call time — pin to commit revisions
+# once the fits are pushed, so a repo update can't silently change results.
 DEFAULT_FIT_REPOS: dict[str, str] = {
     "jwst": "UniverseTBD/bazaar-cosmosweb-d256-jwst",
     "hsc":  "UniverseTBD/bazaar-cosmosweb-d256-hsc",

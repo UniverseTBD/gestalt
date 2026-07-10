@@ -40,13 +40,41 @@ from bazaar.whiten import pca_zscore_fit, pca_zscore_transform
 
 SCHEMA_VERSION = 5
 
+_MODEL_CARD_TEMPLATE = """---
+{{ card_data }}
+---
+
+# BazaarFit
+
+A saved [The Bazaar](https://github.com/Smith42/the-bazaar) alignment fit:
+per-model PCA + z-score whitening and an MCCA projector that maps a basket of
+frozen foundation-model embeddings into one shared latent space.
+
+```python
+from bazaar import BazaarFit
+
+fit = BazaarFit.from_pretrained("{{ repo_id | default("org/repo", true) }}")
+unified = fit.transform(per_model_embeddings)  # (N, D) shared latent
+```
+
+`config.json` records the latent dimension `D`, the fit seed, and the basket
+order (which pins the row partitioning of the MCCA projector `V`).
+"""
+
 
 def _model_key(family: str, size: str) -> str:
     return f"{family}_{size}"
 
 
 @dataclass
-class BazaarFit(ModelHubMixin):
+class BazaarFit(
+    ModelHubMixin,
+    library_name="the-bazaar",
+    repo_url="https://github.com/Smith42/the-bazaar",
+    pipeline_tag="feature-extraction",
+    tags=["astronomy", "embeddings", "mcca", "foundation-models"],
+    model_card_template=_MODEL_CARD_TEMPLATE,
+):
     """Persisted basket fit: per-model full-rank whitener + MCCA projector V."""
 
     D: int

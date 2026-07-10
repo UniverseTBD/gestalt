@@ -14,7 +14,7 @@ dependencies = [
     "datasets>=2.14",
     "tqdm>=4.65",
     "matplotlib>=3.7",
-    "huggingface_hub>=0.20",
+    "huggingface_hub>=0.21",  # ModelHubMixin class kwargs (library_name, tags, ...)
     "safetensors>=0.4",
     "pyarrow>=14.0",
     # Image → embedding (vendored from platonic-universe)

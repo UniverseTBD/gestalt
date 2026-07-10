@@ -1,7 +1,8 @@
-"""Bazaar CLI: two user verbs (run / fit) and a bench verb.
+"""Bazaar CLI: three user verbs (run / fit / push) and a bench verb.
 
 - `bazaar run   <input>`            — embed + transform via shipped or supplied fit
 - `bazaar fit   <input>`            — embed + fit a fresh BazaarFit
+- `bazaar push  <fit_dir> <repo>`   — publish a saved fit to the HF Hub
 - `bazaar bench {cosmos,gz10,galaxies} ...` — the dataset benchmark sweeps
 """
 from __future__ import annotations
@@ -46,6 +47,19 @@ def cmd_fit(args: argparse.Namespace) -> int:
         batch_size=args.batch_size,
         out=args.out,
     )
+    return 0
+
+
+def cmd_push(args: argparse.Namespace) -> int:
+    from bazaar.fit import BazaarFit  # local: keeps `bazaar bench -h` fast
+
+    fit_obj = BazaarFit.from_pretrained(str(args.fit_dir))
+    url = fit_obj.push_to_hub(
+        args.repo_id,
+        private=args.private,
+        commit_message=args.commit_message,
+    )
+    print(f"[bazaar.push] {args.fit_dir} → {url}")
     return 0
 
 
@@ -359,6 +373,19 @@ def main(argv: list[str] | None = None) -> int:
     fit_p.add_argument("--out", type=Path, required=True,
                        help="Output directory for the saved fit")
     fit_p.set_defaults(func=cmd_fit)
+
+    push_p = sub.add_parser("push",
+                            help="Publish a saved fit directory to the "
+                                 "Hugging Face Hub")
+    push_p.add_argument("fit_dir", type=Path,
+                        help="Local fit directory (from `bazaar fit --out`)")
+    push_p.add_argument("repo_id",
+                        help="Target HF repo id (e.g. org/my-fit); created "
+                             "if it doesn't exist")
+    push_p.add_argument("--private", action="store_true",
+                        help="Create the repo as private")
+    push_p.add_argument("--commit-message", default="Upload BazaarFit")
+    push_p.set_defaults(func=cmd_push)
 
     bench_p = sub.add_parser("bench", help="benchmark sweeps")
     bench_sub = bench_p.add_subparsers(dest="dataset", required=True)

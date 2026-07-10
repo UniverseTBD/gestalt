@@ -53,9 +53,9 @@ preprocessing on new rows:
 
 ```
 <fit_dir>/
-├── meta.json                       schema, D, seed, basket order
-├── pca/<family>_<size>.npz         components_, mean_, zscore_μ, zscore_σ
-└── mcca.npz                        V (M·D × D)
+├── config.json                       schema_version, D, seed, basket order
+├── pca/<family>_<size>.safetensors   pca_components, pca_mean, zscore_mu, zscore_sd
+└── mcca.safetensors                  V (Σ d_m × D)
 ```
 
 `BazaarFit.transform(new_embeddings)` runs each model's saved PCA + z-score

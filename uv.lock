@@ -2815,7 +2815,7 @@ requires-dist = [
     { name = "accelerate", specifier = ">=1.0.0" },
     { name = "astropt", specifier = ">=2.0.5" },
     { name = "datasets", specifier = ">=2.14" },
-    { name = "huggingface-hub", specifier = ">=0.20" },
+    { name = "huggingface-hub", specifier = ">=0.21" },
     { name = "matplotlib", specifier = ">=3.7" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },

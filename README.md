@@ -134,6 +134,9 @@ bazaar fit UniverseTBD/mmu_hsc_pdr3_dud_22.5 --D 256 --out fits/hsc-d256
 
 # Apply a saved fit to new data.
 bazaar run UniverseTBD/some_other_dataset --fit fits/hsc-d256 --out new_unified.npy
+
+# Publish a saved fit to the Hugging Face Hub.
+bazaar push fits/hsc-d256 you/your-fit
 ```
 
 Both `run` and `fit` accept:

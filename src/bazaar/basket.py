@@ -34,6 +34,8 @@ BASKET: list[tuple[str, str]] = [
 # `bazaar.embed.models.get_adapter()` keys on; the hf_model_name is what the
 # adapter's `load()` passes to `from_pretrained`. Lifted from
 # `pu/experiments.py:53-147` for the 8 families in BASKET.
+# TODO(release): checkpoints resolve `main` at call time — pin commit revisions
+# so "22 frozen models" is enforced, not assumed.
 MODEL_REGISTRY: dict[tuple[str, str], tuple[str, str]] = {
     # astropt — all sizes share the same astropt repo; size string selects the checkpoint
     ("astropt", "015M"): ("astropt", "Smith42/astroPT_v2.0"),
@@ -72,6 +74,8 @@ def basket_signature(basket: list[tuple[str, str]] = BASKET) -> str:
     """Deterministic 16-hex fingerprint of the basket order + composition."""
     return hashlib.sha1(json.dumps(basket).encode()).hexdigest()[:16]
 
+# TODO(release): unpinned external dataset — pin a commit revision like
+# `_ingest/galaxies.py` does (row alignment across models depends on ordering).
 DATASET = "Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2"
 DS_TAG = DATASET.split("/")[-1]
 DOWNLOAD_N_USE = 45_000
