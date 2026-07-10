@@ -19,3 +19,10 @@ dist/
 .vscode/
 .idea/
 .DS_Store
+
+# local dev notes / assistant config
+.claude/
+/ideas.md
+
+# symlink to the sibling paper repo
+/the-bazaar-paper

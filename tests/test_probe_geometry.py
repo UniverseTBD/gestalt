@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from bazaar.bench._probe_coeffs import fit_probe_coeffs
-from bazaar.bench.probes import (
+from bazaar.bench.probe_geometry import (
     PROPERTIES,
     _three_probe_cos_matrix,
     run_probes,

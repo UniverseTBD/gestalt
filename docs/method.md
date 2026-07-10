@@ -8,8 +8,9 @@ For each telescope `M ∈ {hsc, jwst}`:
    from `UniverseTBD/pu-embeddings/cosmosweb/`. Native dims `d_m` range
    from 384 (AstroPT-015M) to 5120 (LLaVA-1.5-13B).
 2. **PCA + z-score** (`bazaar.whiten.pca_zscore_fit`). Randomised-SVD
-   PCA to `D ∈ {128, 256}` components, then per-feature z-score on the
-   full N=45 000 rows. Output: `Ẑ_m ∈ R^{N × D}` for each model.
+   PCA to `min(D, d_m)` components (D = 1024 for the canonical sweep),
+   then per-feature z-score on the full N=45 000 rows. Output:
+   `Ẑ_m ∈ R^{N × min(D, d_m)}` for each model.
 3. **Form two basket sources**:
    - `B_mcca_whitened`: full-rank per-view PCA + z-score, then
      `mcca_fit([Ẑ_1, …, Ẑ_M], D)` returns the projector V and the
@@ -17,7 +18,7 @@ For each telescope `M ∈ {hsc, jwst}`:
    - `B_concat_pca`: PCA-to-D on the raw 22-model horizontal
      concatenation (no per-model whitening) — a baseline that lets the
      SVD pick a global subspace without an alignment step.
-4. **Linear probe** (`bazaar.bench.probe.run_probe`) on each basket
+4. **Linear probe** (`bazaar.bench.linear_probe.run_probe`) on each basket
    source and each single-model `Ẑ_m`, for `y ∈ {redshift, log M★, sSFR}`
    and 10 random seeds.
 
@@ -124,10 +125,12 @@ for "best achievable native R²" at full corpus size.
 
 ## Hyperparameters
 
-- `D` (PCA / shared-latent dimensionality): default 256. We sweep
-  {128, 256}; D=512 is parked behind a per-model native-dim floor
-  (AstroPT-015M is only 384-d, so D=512 requires either dropping that
-  checkpoint or padding).
+- `D` (PCA / shared-latent dimensionality): 1024 for all canonical
+  results. Per-model PCA truncates to `min(D, d_m)`, so models narrower
+  than D (e.g. AstroPT-015M at 384-d) keep their native width. Earlier
+  D ∈ {128, 256} sweeps are retained as ablations (`results_pca256.parquet`);
+  the D=256 sweep is also where the alignment-mode comparison lives
+  (MCCA > Procrustes/GPA ≫ concat→PCA > best single ≫ naive mean).
 - `n_seeds`: 10. Each seed picks an independent train/test split via
   `sklearn.model_selection.train_test_split(random_state=seed)`.
 - `test_size`: 5 000.

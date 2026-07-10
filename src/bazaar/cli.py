@@ -193,7 +193,7 @@ def cmd_bench_dims(args: argparse.Namespace) -> int:
 
 
 def cmd_bench_probes(args: argparse.Namespace) -> int:
-    from bazaar.bench.probes import run_probes_cosmos  # local: heavy imports
+    from bazaar.bench.probe_geometry import run_probes_cosmos  # local: heavy imports
 
     args.emb_dir.mkdir(parents=True, exist_ok=True)
     telescopes = ("hsc", "jwst")

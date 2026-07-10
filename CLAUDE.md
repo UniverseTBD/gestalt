@@ -47,7 +47,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
                           bazaar.align.mcca_fit  (shared latent V)
                                               │
                                               ▼
-                bazaar.bench.probe.run_probe  (linear probe R²)
+                bazaar.bench.linear_probe.run_probe  (linear probe R²)
 ```
 
 **`BazaarFit` is the central artifact.** It bundles per-model PCA components + means, per-feature z-score stats, and the MCCA projector `V` of shape `(M·D, D)`. It inherits `huggingface_hub.ModelHubMixin`, so `BazaarFit.from_pretrained("org/repo")` / `fit.save_pretrained(dir)` / `fit.push_to_hub("org/repo")` all work natively. The directory layout is:
@@ -71,7 +71,7 @@ raw images ──(optional: bazaar.embed)──> per-model .npy cache
 - `cli.py` — argparse subcommands.
 - `_ingest/` — HF dataset adapters (`hf_streaming`, `gz10`, `galaxies`) that produce `CatalogSource` rows + label streams.
 - `embed/` — per-model embedding pipeline (`embed_basket`), preprocessing, zoom/crop, and model adapters. Vendored from `platonic-universe`.
-- `bench/` — `probe.run_probe` / `run_classification_probe` (linear/logistic probes) and three dataset sweeps (`cosmosweb.py`, `gz10.py`, `galaxies.py`) on a shared `_runner.py` (whitening + basket-source construction). All sweeps emit the same long-form schema: `modality, property, kind, source, seed, r2, acc, f1, n_valid` (NaN where the metric is inapplicable to the probe kind). Plot rendering is *not* in this package — see the `scripts/plot_*.py` family.
+- `bench/` — `linear_probe.run_probe` / `run_classification_probe` (linear/logistic probe evaluators) and six sweeps: three dataset sweeps (`cosmosweb.py`, `gz10.py`, `galaxies.py`) on a shared `_runner.py` (whitening + basket-source construction), plus `scaling.py` (R² vs basket size k), `transfer.py` (cross-survey fits), `dimensions.py` (per-dim covariate R²), and `probe_geometry.py` (3×3 probe-direction cosine matrices; CLI name `bazaar bench probes`). The dataset sweeps emit the same long-form schema: `modality, property, kind, source, seed, r2, acc, f1, n_valid` (NaN where the metric is inapplicable to the probe kind). Plot rendering is *not* in this package — see the `scripts/plot_*.py` family.
 
 ## Conventions worth knowing
 

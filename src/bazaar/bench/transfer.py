@@ -40,7 +40,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from bazaar.basket import BASKET, basket_signature, load_embeddings
-from bazaar.bench.probe import run_classification_probe, run_probe
+from bazaar.bench.linear_probe import run_classification_probe, run_probe
 from bazaar.embed import embed_basket
 from bazaar.fit import BazaarFit
 from bazaar.whiten import pca_zscore_fit, pca_zscore_transform

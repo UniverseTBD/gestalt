@@ -31,7 +31,7 @@ import numpy as np
 from bazaar.align import mcca_fit
 from bazaar.basket import load_embeddings
 from bazaar.bench.cosmosweb import PROPERTIES
-from bazaar.bench.probe import run_probe
+from bazaar.bench.linear_probe import run_probe
 from bazaar.whiten import pca_zscore_fit
 
 Basket = list[tuple[str, str]]

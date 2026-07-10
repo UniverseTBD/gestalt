@@ -24,7 +24,7 @@ import numpy as np
 from bazaar._ingest.gz10 import GZ10_DATASET, GZ10_MODALITY, gz10_source, stream_labels
 from bazaar.basket import BASKET, basket_signature
 from bazaar.bench._runner import build_basket_sources, whiten_per_model
-from bazaar.bench.probe import run_classification_probe, run_probe
+from bazaar.bench.linear_probe import run_classification_probe, run_probe
 from bazaar.embed import embed_basket
 
 # (property, kind). `kind` picks the probe.

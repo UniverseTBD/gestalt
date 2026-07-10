@@ -12,8 +12,7 @@ Columns:
      matrices, summarising "what a typical single model looks like."
 
 Falls back to `data/probes_smoke.parquet` (D=256) with a `_smoke`
-filename suffix if `data/probes_1024.parquet` is not yet present (the
-D=1024 rerun is tracked in `plan.md`).
+filename suffix if `data/probes_1024.parquet` is not yet present.
 """
 from __future__ import annotations
 

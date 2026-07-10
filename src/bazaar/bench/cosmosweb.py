@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from bazaar.basket import DATASET, load_embeddings
 from bazaar.bench._runner import build_basket_sources, whiten_per_model
-from bazaar.bench.probe import run_probe
+from bazaar.bench.linear_probe import run_probe
 
 # Physics parameter → dataset column for Ashodkh/cosmosweb-hsc-jwst-high-snr-pil2.
 CATALOG_COLUMNS = {

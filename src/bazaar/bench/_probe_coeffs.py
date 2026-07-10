@@ -1,6 +1,6 @@
 """Probe-coefficient helper for `bazaar bench probes`.
 
-Mirrors `bazaar.bench.probe.run_probe`'s pipeline (1st/99th percentile clip
+Mirrors `bazaar.bench.linear_probe.run_probe`'s pipeline (1st/99th percentile clip
 on the target, StandardScaler on features, LinearRegression) but returns the
 *un-scaled* coefficient vector + intercept + valid count instead of a held-
 out R². The un-scaling — dividing by `scaler.scale_` — is what makes

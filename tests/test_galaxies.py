@@ -19,7 +19,7 @@ from bazaar._ingest.galaxies import (
     galaxies_source,
 )
 from bazaar.bench.galaxies import PROPERTIES
-from bazaar.bench.probe import run_probe
+from bazaar.bench.linear_probe import run_probe
 
 
 def test_galaxies_source_metadata():

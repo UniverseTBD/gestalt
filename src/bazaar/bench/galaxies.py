@@ -43,7 +43,7 @@ from bazaar._ingest.galaxies import (
 )
 from bazaar.basket import BASKET, basket_signature
 from bazaar.bench._runner import build_basket_sources, whiten_per_model
-from bazaar.bench.probe import run_probe
+from bazaar.bench.linear_probe import run_probe
 from bazaar.embed import embed_basket
 
 # All 13 targets are continuous regression; ordering pinned for stable output.

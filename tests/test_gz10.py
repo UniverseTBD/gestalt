@@ -11,7 +11,7 @@ import pytest
 
 from bazaar._ingest.gz10 import _fingerprint, gz10_source
 from bazaar.bench.gz10 import _probe_one
-from bazaar.bench.probe import run_classification_probe, run_probe
+from bazaar.bench.linear_probe import run_classification_probe, run_probe
 from bazaar.embed.preprocess import flux_to_pil
 
 

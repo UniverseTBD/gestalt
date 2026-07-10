@@ -40,9 +40,9 @@ stalls first.
 
 ## Method, in one paragraph
 
-For each foundation model, whiten its frozen embedding — either `zscore`
-(per-feature z-score at native width, the default) or `pca_zscore`
-(randomised-SVD PCA to D components, then z-score). Stack the M whitened
+For each foundation model, whiten its frozen embedding — either `pca_zscore`
+(randomised-SVD PCA to D components, then per-feature z-score; the default)
+or `zscore` (z-score at native width, kept as an ablation). Stack the M whitened
 views into `C = [Ẑ₁ | … | Ẑ_M] ∈ R^{N×MD}` and take its top-D left
 singular vectors scaled by their singular values: `S = U Σ`. This is the
 **MCCA shared latent** (Carroll/Kettenring MAX-VAR Generalized CCA) and
@@ -53,19 +53,22 @@ The fit stores the whitening artifacts and the right-singular-vector matrix
 `V = (Vᵀ)ᵀ ∈ R^{MD×D}`, so new data projects as `C_new @ V` without
 refitting.
 
-The evaluation benchmark (`bazaar bench cosmos`) additionally compares against
-two alignment baselines that require equal-width views (`pca_zscore` mode):
+The headline finding, at D=1024: **the MCCA latent beats both the
+supervised-friendly `concat→PCA` baseline and the best single basket member
+on every COSMOS-Web cell** (HSC/JWST × redshift/log M★/sSFR), on both GZ10
+tasks (morphology classification + redshift), and on 12 of 13
+Smith42/galaxies regression targets (the one loss: `mean_ssfr`, where
+CLIP-large alone wins). Probe R² rises monotonically with basket size
+(k = 2 → 22), with ~85 % of the gain already reached by k = 8.
 
-1. **Naive mean** — elementwise mean across the 22 z-scored PCAs (catastrophic
-   without alignment — cancels signal across incompatible coordinate systems).
-2. **Procrustes / GPA-aligned mean** — iteratively rotate each view onto the
-   running consensus mean, then average (`R = U Vᵀ` from `SVD(AᵀB)`).
-
-The headline finding from the COSMOS-Web benchmark: **MCCA wins every cell**.
-Procrustes wins every cell except JWST sSFR. Naive mean is worst everywhere.
+An earlier D=256 ablation compares alignment modes head-to-head:
+**MCCA > Procrustes/GPA ≫ concat→PCA > best single ≫ naive mean** — the
+naive elementwise mean of unaligned views is worst everywhere (it cancels
+signal across incompatible coordinate systems), so alignment, not
+ensembling, is what does the work.
 
 See [`docs/method.md`](docs/method.md) for the full algorithm details and
-[`docs/results.md`](docs/results.md) for the D=128 / D=256 stats.
+[`docs/results.md`](docs/results.md) for the numbers.
 
 ## Install
 
@@ -152,15 +155,19 @@ classification + redshift task and the 13 Sanjaripour+2026 regression
 targets on Smith42/galaxies respectively:
 
 ```bash
-bazaar bench cosmos --D 256 --out data/results_pca256.parquet \
-                    --emb-dir embeds
+bazaar bench cosmos --D 1024 --out data/cosmos_1024.parquet --emb-dir embeds
 uv run scripts/plot_r2_vs_params_cosmos.py
+uv run scripts/plot_basket_vs_singles.py
 ```
 
-This writes a 1 500-row long-form parquet (modality × property × seed ×
-{naive, procrustes, mcca, 22×single}). The standalone plotting scripts
-under `scripts/plot_*.py` (one per sweep) render the figures into
-`figs/`.
+This writes a long-form parquet (modality × property × seed ×
+{mcca, concat→PCA, 22×single}). Additional sweeps: `bazaar bench scaling`
+(probe R² vs basket size k), `bazaar bench dims` (per-dimension covariate
+decomposition of the latent), and `bazaar bench probes` (probe-direction
+geometry: 3×3 cosine matrices between the redshift/log M★/sSFR probe
+weight vectors). The standalone plotting scripts under `scripts/plot_*.py`
+(one per sweep) render the figures into `figs/`, and
+`scripts/gen_latex_tables.py` emits the LaTeX tables used in the paper.
 
 ### Cross-survey generalization (`bazaar bench transfer`)
 
