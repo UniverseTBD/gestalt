@@ -102,7 +102,7 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=80, ha="right", fontsize=8)
+    ax.set_xticklabels(names, rotation=90, ha="center", fontsize=8)
     _inward_ticks(ax)
 
 
