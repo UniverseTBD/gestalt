@@ -54,7 +54,6 @@ VALUE_SIZE = 6.5
 LABEL_SIZE = 8.5
 LEGEND_SIZE = 7.5
 MEMBER_COLOR = "#1f77b4"
-MEMBER_EDGE = "#174a70"
 GESTALT_COLOR = "#ff7f0e"
 
 
@@ -120,7 +119,7 @@ def _plot_panel(ax, df: pd.DataFrame, modality: str) -> None:
         )
         for body in violin["bodies"]:
             body.set_facecolor(MEMBER_COLOR)
-            body.set_edgecolor(MEMBER_EDGE)
+            body.set_edgecolor("none")
             body.set_linewidth(0.7)
             body.set_alpha(1.0)
 
@@ -169,7 +168,7 @@ def main() -> None:
     axes[0].set_ylabel("probe cosine", fontsize=LABEL_SIZE)
 
     handles = [
-        Patch(facecolor=MEMBER_COLOR, edgecolor=MEMBER_EDGE, label="22 member models"),
+        Patch(facecolor=MEMBER_COLOR, edgecolor="none", label="22 member models"),
         Line2D(
             [0],
             [0],
@@ -188,11 +187,11 @@ def main() -> None:
         ncol=2,
         fontsize=LEGEND_SIZE,
         frameon=False,
-        bbox_to_anchor=(0.5, 0.02),
+        bbox_to_anchor=(0.5, 0.30),
         handletextpad=0.35,
         columnspacing=1.0,
     )
-    fig.subplots_adjust(left=0.12, right=0.98, bottom=0.27, top=0.86, wspace=0.18)
+    fig.subplots_adjust(left=0.129, right=0.973, bottom=0.483, top=0.871, wspace=0.185)
 
     out = FIGS / f"probes_confusion{suffix}.pdf"
     fig.savefig(out)
