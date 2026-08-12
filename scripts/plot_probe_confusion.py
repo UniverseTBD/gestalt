@@ -53,10 +53,9 @@ TICK_SIZE = 7.5
 VALUE_SIZE = 6.5
 LABEL_SIZE = 8.5
 LEGEND_SIZE = 7.5
-MEMBER_COLOR = "#d9d9d9"
-MEMBER_EDGE = "#7f7f7f"
+MEMBER_COLOR = "#1f77b4"
+MEMBER_EDGE = "#174a70"
 GESTALT_COLOR = "#ff7f0e"
-ZERO_COLOR = "#b0b0b0"
 
 
 def _inward_ticks(ax) -> None:
@@ -148,7 +147,6 @@ def _plot_panel(ax, df: pd.DataFrame, modality: str) -> None:
             zorder=4,
         )
 
-    ax.axhline(0.0, color=ZERO_COLOR, lw=0.6, zorder=0)
     ax.set_title(modality.upper(), fontsize=TITLE_SIZE, pad=3)
     ax.set_xlim(0.45, len(PROPERTY_PAIRS) + 0.55)
     ax.set_ylim(-1.0, 1.0)
