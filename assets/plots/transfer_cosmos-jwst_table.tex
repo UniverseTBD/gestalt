@@ -1,0 +1,30 @@
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\caption{COSMOS-Web JWST cross-survey transfer: linear-probe $R^2$ on the 45\,000-galaxy JWST target when the basket fit is trained on each of the four source corpora.}
+\label{tab:transfer-cosmos-jwst}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccc}
+\toprule
+Source & Fit on & $z_{\rm phot}$ & $\log M_\star$ & sSFR \\
+\midrule
+\textbf{Basket (MCCA)} & cosmos-jwst$^{\dagger}$ & $\mathbf{0.645 \pm 0.026}$ & $\mathbf{0.836 \pm 0.006}$ & $\mathbf{0.465 \pm 0.017}$ \\
+ & cosmos-hsc & $0.575 \pm 0.016$ & $0.804 \pm 0.011$ & $0.439 \pm 0.018$ \\
+ & galaxies & $0.579 \pm 0.020$ & $0.800 \pm 0.011$ & $0.437 \pm 0.015$ \\
+ & gz10 & $0.592 \pm 0.022$ & $0.808 \pm 0.008$ & $0.443 \pm 0.015$ \\
+\midrule
+\textbf{Basket (concat$\to$PCA)} & cosmos-jwst$^{\dagger}$ & $0.605 \pm 0.024$ & $0.814 \pm 0.009$ & $0.453 \pm 0.011$ \\
+ & cosmos-hsc & $0.568 \pm 0.018$ & $0.792 \pm 0.005$ & $0.431 \pm 0.011$ \\
+ & galaxies & $0.564 \pm 0.019$ & $0.791 \pm 0.007$ & $0.435 \pm 0.006$ \\
+ & gz10 & $0.576 \pm 0.019$ & $0.795 \pm 0.008$ & $0.437 \pm 0.011$ \\
+\midrule
+astropt\_850M & cosmos-jwst$^{\dagger}$ & $0.526 \pm 0.024$ & $0.798 \pm 0.008$ & $0.360 \pm 0.013$ \\
+ & cosmos-hsc & $0.505 \pm 0.019$ & $0.786 \pm 0.009$ & $0.351 \pm 0.015$ \\
+ & galaxies & $0.501 \pm 0.020$ & $0.780 \pm 0.008$ & $0.352 \pm 0.016$ \\
+ & gz10 & $0.504 \pm 0.022$ & $0.781 \pm 0.009$ & $0.352 \pm 0.014$ \\
+\bottomrule
+\end{tabular}
+}
+\par\smallskip\textit{Mean $\pm$ std across probe seeds; best per column in bold. $^{\dagger}$~marks the in-domain fit.}
+\end{table*}

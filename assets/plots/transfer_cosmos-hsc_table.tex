@@ -1,0 +1,30 @@
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\caption{COSMOS-Web HSC cross-survey transfer: linear-probe $R^2$ on the 45\,000-galaxy HSC target when the basket fit is trained on each of the four source corpora. $^{\dagger}$~marks the in-domain fit (\textsc{cosmos-hsc} fit on \textsc{cosmos-hsc}); other rows quantify the cost of fitting on a different survey.}
+\label{tab:transfer-cosmos-hsc}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccc}
+\toprule
+Source & Fit on & $z_{\rm phot}$ & $\log M_\star$ & sSFR \\
+\midrule
+\textbf{Basket (MCCA)} & cosmos-hsc$^{\dagger}$ & $\mathbf{0.506 \pm 0.016}$ & $\mathbf{0.590 \pm 0.015}$ & $\mathbf{0.569 \pm 0.021}$ \\
+ & cosmos-jwst & $0.458 \pm 0.012$ & $0.558 \pm 0.015$ & $0.542 \pm 0.016$ \\
+ & galaxies & $0.469 \pm 0.013$ & $0.564 \pm 0.018$ & $0.539 \pm 0.017$ \\
+ & gz10 & $0.460 \pm 0.015$ & $0.563 \pm 0.016$ & $0.534 \pm 0.017$ \\
+\midrule
+\textbf{Basket (concat$\to$PCA)} & cosmos-hsc$^{\dagger}$ & $0.483 \pm 0.017$ & $0.575 \pm 0.014$ & $0.558 \pm 0.014$ \\
+ & cosmos-jwst & $0.463 \pm 0.017$ & $0.550 \pm 0.014$ & $0.541 \pm 0.013$ \\
+ & galaxies & $0.459 \pm 0.015$ & $0.556 \pm 0.015$ & $0.537 \pm 0.015$ \\
+ & gz10 & $0.452 \pm 0.019$ & $0.553 \pm 0.017$ & $0.539 \pm 0.009$ \\
+\midrule
+astropt\_850M & cosmos-hsc$^{\dagger}$ & $0.452 \pm 0.018$ & $0.558 \pm 0.022$ & $0.513 \pm 0.014$ \\
+ & cosmos-jwst & $0.442 \pm 0.016$ & $0.555 \pm 0.024$ & $0.505 \pm 0.016$ \\
+ & galaxies & $0.439 \pm 0.016$ & $0.551 \pm 0.023$ & $0.502 \pm 0.017$ \\
+ & gz10 & $0.439 \pm 0.016$ & $0.554 \pm 0.022$ & $0.506 \pm 0.011$ \\
+\bottomrule
+\end{tabular}
+}
+\par\smallskip\textit{Mean $\pm$ std across probe seeds; best per column in bold. $^{\dagger}$~marks the in-domain fit.}
+\end{table*}

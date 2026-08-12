@@ -1,0 +1,3 @@
+modality       mcca_whitened          concat_pca               best_single  median_single rank_mcca rank_concat    p_mcca  p_concat
+hsc            0.571±0.007         0.542±0.007         0.520 (vjepa_gi)         0.486      1/23        1/23   0.00195   0.00195
+jwst           0.666±0.007         0.626±0.007         0.617 (vjepa_gi)         0.526      1/23        1/23   0.00195   0.00195

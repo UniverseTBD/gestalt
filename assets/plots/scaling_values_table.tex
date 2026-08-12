@@ -1,0 +1,26 @@
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\caption{COSMOS-Web basket-pruning $R^2$ vs basket size $k$ (MCCA-whitened fusion; mean $\pm$ std across subset draws and probe seeds). The $k{=}22$ column is the single full-basket value, folded into both subset policies; one-per-family is undefined for $k{>}8$ (only 8 model families).}
+\label{tab:scaling-values}
+\begin{tabular}{lllccccc}
+\toprule
+Modality & Property & Subset & $k{=}2$ & $k{=}4$ & $k{=}8$ & $k{=}16$ & $k{=}22$ \\
+\midrule
+HSC & $z_{\rm phot}$ & random & $0.424 \pm 0.028$ & $0.468 \pm 0.020$ & $0.497 \pm 0.013$ & $0.516 \pm 0.009$ & $0.522 \pm 0.008$ \\
+ &  & one/family & $0.445 \pm 0.019$ & $0.474 \pm 0.015$ & $0.504 \pm 0.010$ & -- & $0.522 \pm 0.008$ \\
+ & $\log M_\star$ & random & $0.521 \pm 0.026$ & $0.558 \pm 0.016$ & $0.583 \pm 0.012$ & $0.598 \pm 0.011$ & $0.603 \pm 0.012$ \\
+ &  & one/family & $0.540 \pm 0.018$ & $0.563 \pm 0.013$ & $0.588 \pm 0.011$ & -- & $0.603 \pm 0.012$ \\
+ & sSFR & random & $0.503 \pm 0.028$ & $0.543 \pm 0.023$ & $0.567 \pm 0.015$ & $0.584 \pm 0.013$ & $0.590 \pm 0.015$ \\
+ &  & one/family & $0.520 \pm 0.019$ & $0.551 \pm 0.016$ & $0.574 \pm 0.013$ & -- & $0.590 \pm 0.015$ \\
+\midrule
+JWST & $z_{\rm phot}$ & random & $0.478 \pm 0.064$ & $0.567 \pm 0.043$ & $0.623 \pm 0.019$ & $0.652 \pm 0.011$ & $0.661 \pm 0.011$ \\
+ &  & one/family & $0.523 \pm 0.023$ & $0.578 \pm 0.030$ & $0.636 \pm 0.012$ & -- & $0.661 \pm 0.011$ \\
+ & $\log M_\star$ & random & $0.727 \pm 0.051$ & $0.785 \pm 0.031$ & $0.827 \pm 0.010$ & $0.843 \pm 0.004$ & $0.849 \pm 0.003$ \\
+ &  & one/family & $0.762 \pm 0.025$ & $0.796 \pm 0.021$ & $0.833 \pm 0.005$ & -- & $0.849 \pm 0.003$ \\
+ & sSFR & random & $0.381 \pm 0.033$ & $0.432 \pm 0.028$ & $0.465 \pm 0.015$ & $0.482 \pm 0.012$ & $0.489 \pm 0.011$ \\
+ &  & one/family & $0.394 \pm 0.016$ & $0.437 \pm 0.020$ & $0.472 \pm 0.012$ & -- & $0.489 \pm 0.011$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
