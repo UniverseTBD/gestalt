@@ -44,10 +44,13 @@ PROPERTY_LABEL = {
 
 FIG_WIDTH_IN = 396 / 72
 FIG_HEIGHT_IN = 2.5
+TITLE_SIZE = 8.5
+PROPERTY_SIZE = 7.5
+VALUE_SIZE = 6.5
+LEGEND_SIZE = 7.5
 RANGE_COLOR = "#7f7f7f"
 GESTALT_COLOR = "#ff7f0e"
 ZERO_COLOR = "#b0b0b0"
-DIAGONAL_COLOR = "#ffffff"
 CELL_HALF_WIDTH = 0.40
 
 
@@ -91,9 +94,7 @@ def _resolve_parquet() -> tuple[Path, str]:
             "Output filename will be suffixed _smoke."
         )
         return smoke, "_smoke"
-    raise FileNotFoundError(
-        "neither data/probes_1024.parquet nor data/probes_smoke.parquet exists"
-    )
+    raise FileNotFoundError("neither data/probes_1024.parquet nor data/probes_smoke.parquet exists")
 
 
 def _cell_x(column: int, value: float) -> float:
@@ -128,26 +129,23 @@ def _plot_range_cell(ax, row: int, column: int, low: float, high: float, gestalt
         zorder=3,
     )
 
-    # Keep the value toward the outside of its triangle, away from the
-    # diagonal and the neighboring cell's annotation.
-    text_row = row - 0.19 if row < column else row + 0.19
+    # Place the value just below the marker without crowding neighboring cells.
+    text_row = row + 0.19
     ax.text(
         point,
         text_row,
         f"{gestalt:+.2f}",
         ha="center",
         va="center",
-        fontsize=7.5,
+        fontsize=VALUE_SIZE,
         color="#222222",
         zorder=4,
     )
 
 
-def _plot_matrix(ax, df: pd.DataFrame) -> None:
-    ranges = {modality: _member_ranges(df, modality) for modality in MODALITIES}
-    gestalt = {
-        modality: _pivot_cos(df, modality, "basket_mcca_whitened") for modality in MODALITIES
-    }
+def _plot_matrix(ax, df: pd.DataFrame, modality: str) -> None:
+    low, high = _member_ranges(df, modality)
+    gestalt = _pivot_cos(df, modality, "basket_mcca_whitened")
 
     for diagonal in range(len(PROPERTIES)):
         ax.add_patch(
@@ -163,21 +161,8 @@ def _plot_matrix(ax, df: pd.DataFrame) -> None:
 
     for row in range(len(PROPERTIES)):
         for column in range(len(PROPERTIES)):
-            if row == column:
-                continue
-            modality = "hsc" if row > column else "jwst"
-            low, high = ranges[modality]
-            _plot_range_cell(ax, row, column, low[row, column], high[row, column], gestalt[modality][row, column])
-
-    ax.plot(
-        [-0.5, len(PROPERTIES) - 0.5],
-        [-0.5, len(PROPERTIES) - 0.5],
-        color=DIAGONAL_COLOR,
-        lw=2.0,
-        zorder=5,
-    )
-    ax.text(1.62, 0.34, "JWST", color="#555555", fontsize=7.5, fontstyle="italic", zorder=6)
-    ax.text(0.34, 1.66, "HSC", color="#555555", fontsize=7.5, fontstyle="italic", zorder=6)
+            if row != column:
+                _plot_range_cell(ax, row, column, low[row, column], high[row, column], gestalt[row, column])
 
     labels = [PROPERTY_LABEL[prop] for prop in PROPERTIES]
     ax.set_xlim(-0.5, len(PROPERTIES) - 0.5)
@@ -185,7 +170,8 @@ def _plot_matrix(ax, df: pd.DataFrame) -> None:
     ax.set_xticks(range(len(PROPERTIES)), labels=labels)
     ax.set_yticks(range(len(PROPERTIES)), labels=labels)
     ax.xaxis.tick_top()
-    ax.tick_params(axis="both", which="major", labelsize=8, pad=2, length=3)
+    ax.set_title(modality.upper(), fontsize=TITLE_SIZE, pad=3)
+    ax.tick_params(axis="both", which="major", labelsize=PROPERTY_SIZE, pad=2, length=3)
     ax.tick_params(axis="both", which="minor", length=0)
     _inward_ticks(ax)
     for spine in ax.spines.values():
@@ -197,8 +183,9 @@ def main() -> None:
     parquet_path, suffix = _resolve_parquet()
     df = pd.read_parquet(parquet_path)
 
-    fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN))
-    _plot_matrix(ax, df)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN))
+    for ax, modality in zip(axes, MODALITIES):
+        _plot_matrix(ax, df, modality)
 
     handles = [
         Line2D([0], [0], color=RANGE_COLOR, lw=2.0, label="22 member range"),
@@ -218,13 +205,13 @@ def main() -> None:
         handles=handles,
         loc="lower center",
         ncol=2,
-        fontsize=8,
+        fontsize=LEGEND_SIZE,
         frameon=False,
         bbox_to_anchor=(0.5, 0.02),
         handletextpad=0.35,
         columnspacing=1.0,
     )
-    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.24, top=0.88)
+    fig.subplots_adjust(left=0.08, right=0.98, bottom=0.24, top=0.86, wspace=0.28)
 
     out = FIGS / f"probes_confusion{suffix}.pdf"
     fig.savefig(out)
