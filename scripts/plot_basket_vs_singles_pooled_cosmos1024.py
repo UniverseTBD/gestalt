@@ -158,13 +158,13 @@ def main() -> None:
     fig.legend(
         handles,
         labels,
-        loc="upper center",
+        loc="lower center",
         ncol=len(labels),
         frameon=False,
         fontsize=8,
-        bbox_to_anchor=(0.5, 1.04),
+        bbox_to_anchor=(0.5, -0.06),
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
 
     pdf_path = FIGS / "basket_vs_singles_pooled_cosmos1024.pdf"
     fig.savefig(pdf_path, bbox_inches="tight")
