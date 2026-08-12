@@ -85,10 +85,7 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
 
     for src, arr in baskets.items():
         style = BASKET_STYLE[src]
-        bm = arr.mean()
-        bse = arr.std(ddof=1) / np.sqrt(len(arr))
-        ax.axhspan(bm - bse, bm + bse, color=style["color"], alpha=0.18, zorder=0)
-        ax.axhline(bm, color=style["color"], lw=1.4, label=style["label"])
+        ax.axhline(arr.mean(), color=style["color"], lw=1.4, label=style["label"])
 
     best = int(np.argmax(means))
     ax.scatter(
@@ -110,7 +107,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
     for modality in MODALITIES:
         singles, baskets = cell_pivot(df, modality)
         means = {n: a.mean() for n, a in singles.items()}
-        best_name = max(means, key=means.get)
+        best_name = max(means, key=lambda name: means[name])
         best_arr = singles[best_name]
         median_single = float(np.median(list(means.values())))
 
