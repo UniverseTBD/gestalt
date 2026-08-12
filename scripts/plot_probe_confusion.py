@@ -47,7 +47,7 @@ PAIR_LABELS = (
 )
 
 FIG_WIDTH_IN = 396 / 72
-FIG_HEIGHT_IN = 2.5
+FIG_HEIGHT_IN = 1.8
 TITLE_SIZE = 9
 TICK_SIZE = 7.5
 VALUE_SIZE = 6.5
@@ -187,11 +187,11 @@ def main() -> None:
         ncol=2,
         fontsize=LEGEND_SIZE,
         frameon=False,
-        bbox_to_anchor=(0.5, 0.30),
+        bbox_to_anchor=(0.5, 0.02),
         handletextpad=0.35,
         columnspacing=1.0,
     )
-    fig.subplots_adjust(left=0.129, right=0.973, bottom=0.483, top=0.871, wspace=0.185)
+    fig.subplots_adjust(left=0.129, right=0.973, bottom=0.282, top=0.820, wspace=0.185)
 
     out = FIGS / f"probes_confusion{suffix}.pdf"
     fig.savefig(out)
