@@ -79,21 +79,9 @@ def cell_pivot(
 def plot_cell(ax, singles: dict, baskets: dict) -> None:
     names = sorted(singles, key=lambda n: singles[n].mean())
     means = np.array([singles[n].mean() for n in names])
-    ses = np.array([singles[n].std(ddof=1) / np.sqrt(len(singles[n])) for n in names])
 
     x = np.arange(len(names))
-    ax.errorbar(
-        x,
-        means,
-        yerr=ses,
-        fmt="o",
-        color="#1f77b4",
-        ms=3,
-        capsize=1.5,
-        capthick=0.6,
-        elinewidth=0.6,
-        label="single model",
-    )
+    ax.plot(x, means, "o", color="#1f77b4", ms=3, linestyle="none", label="single model")
 
     for src, arr in baskets.items():
         style = BASKET_STYLE[src]
@@ -108,7 +96,7 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=80, ha="right", fontsize=6)
+    ax.set_xticklabels(names, rotation=80, ha="right", fontsize=8)
     _inward_ticks(ax)
 
 
