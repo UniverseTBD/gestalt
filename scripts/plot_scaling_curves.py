@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """Scaling curves: R² vs basket size k for `bench scaling`.
 
-One clean line per `subset_kind ∈ {random, one_per_family}`, plus
-best-single and median-single horizontal references. The main two-panel
-figure uses the compact 396pt paper layout and the Figure 1 visual theme.
-
-Best/median-single references are read from `data/cosmos_1024.parquet`
-so the basket-vs-single line matches the canonical D=1024 sweep used by
-the model-size scatter plots.
+One clean line per `subset_kind ∈ {random, one_per_family}`. The main
+two-panel figure uses the compact 396pt paper layout and the Figure 1
+visual theme.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -36,8 +33,8 @@ PROPERTIES = ["redshift", "mass", "sSFR"]
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
 PROPERTY_LABEL = {
     "redshift": r"$z_{\rm phot}$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     r"sSFR",
+    "mass": r"$\log M_\star$",
+    "sSFR": r"sSFR",
 }
 
 BASKET_STYLE = {
@@ -45,11 +42,14 @@ BASKET_STYLE = {
 }
 FIG_WIDTH_IN = 396 / 72
 FIG_HEIGHT_IN = 2.5
+TITLE_SIZE = 9
+TICK_SIZE = 7.5
+LABEL_SIZE = 10
+LEGEND_SIZE = 8
 
 SUBSET_STYLE = {
-    "random":         {"label": "random", "marker": "o", "linestyle": "-"},
-    "one_per_family": {"label": "one per family", "marker": "^",
-                       "linestyle": "--"},
+    "random": {"label": "random", "marker": "o", "linestyle": "-"},
+    "one_per_family": {"label": "one per family", "marker": "^", "linestyle": "--"},
 }
 
 SUBSET_KINDS = ("random", "one_per_family")
@@ -92,12 +92,7 @@ def _scaling_curve(
     for i, k in enumerate(ks):
         # average over properties within each (subset_id, seed) first so
         # the mean reflects between-seed/draw variability, not between-prop.
-        per_draw = (
-            sub[sub["k"] == k]
-            .groupby(["subset_id", "seed"])["r2"]
-            .mean()
-            .to_numpy()
-        )
+        per_draw = sub[sub["k"] == k].groupby(["subset_id", "seed"])["r2"].mean().to_numpy()
         per_draw = per_draw[np.isfinite(per_draw)]
         if per_draw.size == 0:
             continue
@@ -105,30 +100,9 @@ def _scaling_curve(
     return np.asarray(ks, dtype=float), means
 
 
-def _single_refs(
-    cosmos_df: pd.DataFrame, modality: str, props: list[str]
-) -> tuple[float, float]:
-    """(best_single_mean, median_single_mean) averaged across `props`."""
-    sub = cosmos_df[
-        (cosmos_df["modality"] == modality)
-        & (cosmos_df["property"].isin(props))
-        & (cosmos_df["source"].str.startswith("single_"))
-    ]
-    if sub.empty:
-        return float("nan"), float("nan")
-    per_model = (
-        sub.groupby("source")["r2"].mean().to_numpy()
-    )
-    per_model = per_model[np.isfinite(per_model)]
-    if per_model.size == 0:
-        return float("nan"), float("nan")
-    return float(per_model.max()), float(np.median(per_model))
-
-
 def _plot_panel(
     ax,
     df: pd.DataFrame,
-    cosmos_df: pd.DataFrame,
     modality: str,
     props: list[str],
     title: str,
@@ -140,16 +114,15 @@ def _plot_panel(
             continue
         style = SUBSET_STYLE[kind]
         ax.plot(
-            ks, means,
-            color=color, marker=style["marker"], linestyle=style["linestyle"],
-            ms=4, lw=1.2, label=f"Gestalt, {style['label']}",
+            ks,
+            means,
+            color=color,
+            marker=style["marker"],
+            linestyle=style["linestyle"],
+            ms=4,
+            lw=1.2,
+            label=f"Gestalt, {style['label']}",
         )
-
-    best, median = _single_refs(cosmos_df, modality, props)
-    if np.isfinite(best):
-        ax.axhline(best, color="#2ca02c", lw=1.0, ls=":", label="best single")
-    if np.isfinite(median):
-        ax.axhline(median, color="#7f7f7f", lw=1.0, ls="--", label="median single")
 
     ks_all = sorted(df["k"].dropna().unique())
     if ks_all:
@@ -157,26 +130,30 @@ def _plot_panel(
         ax.set_xticks(ks_all)
         ax.set_xticklabels([str(int(k)) for k in ks_all])
         ax.minorticks_off()
-    ax.set_title(title, fontsize=9)
-    ax.tick_params(labelsize=8)
+    ax.set_title(title, fontsize=TITLE_SIZE)
+    ax.tick_params(labelsize=TICK_SIZE)
     _inward_ticks(ax)
 
 
-def plot_mean(df: pd.DataFrame, cosmos_df: pd.DataFrame) -> None:
+def plot_mean(df: pd.DataFrame) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=False)
     for ax, modality in zip(axes, MODALITIES):
-        _plot_panel(ax, df, cosmos_df, modality, PROPERTIES,
-                    MODALITY_LABEL[modality])
-        ax.set_xlabel("basket size $k$", fontsize=9)
+        _plot_panel(ax, df, modality, PROPERTIES, MODALITY_LABEL[modality])
+        ax.set_xlabel("basket size $k$", fontsize=LABEL_SIZE)
         if ax is axes[0]:
-            ax.set_ylabel(r"Mean $R^2$", fontsize=9)
+            ax.set_ylabel(r"$R^2$", fontsize=LABEL_SIZE)
 
     handles, labels = _dedup_legend(axes)
     fig.legend(
-        handles, labels,
-        loc="lower center", fontsize=7.5, ncol=len(labels),
-        columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.5, 0.02), frameon=False,
+        handles,
+        labels,
+        loc="lower center",
+        fontsize=LEGEND_SIZE,
+        ncol=len(labels),
+        columnspacing=0.6,
+        handletextpad=0.2,
+        bbox_to_anchor=(0.5, 0.02),
+        frameon=False,
     )
     fig.tight_layout(rect=(0, 0.12, 1, 1))
     plt.subplots_adjust(wspace=0.22)
@@ -186,25 +163,35 @@ def plot_mean(df: pd.DataFrame, cosmos_df: pd.DataFrame) -> None:
     plt.close(fig)
 
 
-def plot_per_property(df: pd.DataFrame, cosmos_df: pd.DataFrame) -> None:
+def plot_per_property(df: pd.DataFrame) -> None:
     fig, axes = plt.subplots(2, 3, figsize=(11, 5.2), sharex=True)
     for r, modality in enumerate(MODALITIES):
         for c, prop in enumerate(PROPERTIES):
             ax = axes[r, c]
-            _plot_panel(ax, df, cosmos_df, modality, [prop],
-                        f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}")
+            _plot_panel(
+                ax,
+                df,
+                modality,
+                [prop],
+                f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}",
+            )
             if c == 0:
-                ax.set_ylabel(r"$R^2$", fontsize=9)
+                ax.set_ylabel(r"$R^2$", fontsize=LABEL_SIZE)
             if r == 1:
-                ax.set_xlabel("basket size $k$", fontsize=9)
-            ax.tick_params(labelsize=8)
+                ax.set_xlabel("basket size $k$", fontsize=LABEL_SIZE)
+            ax.tick_params(labelsize=TICK_SIZE)
 
     handles, labels = _dedup_legend(axes.flat)
     fig.legend(
-        handles, labels,
-        loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
-        columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.5, 1.04), frameon=False,
+        handles,
+        labels,
+        loc="upper center",
+        fontsize=LEGEND_SIZE,
+        ncol=(len(labels) + 1) // 2,
+        columnspacing=0.6,
+        handletextpad=0.2,
+        bbox_to_anchor=(0.5, 1.04),
+        frameon=False,
     )
     fig.tight_layout()
     plt.subplots_adjust(wspace=0.22, hspace=0.28)
@@ -217,9 +204,8 @@ def plot_per_property(df: pd.DataFrame, cosmos_df: pd.DataFrame) -> None:
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
     df = pd.read_parquet(DATA / "scaling.parquet")
-    cosmos_df = pd.read_parquet(DATA / "cosmos_1024.parquet")
-    plot_mean(df, cosmos_df)
-    plot_per_property(df, cosmos_df)
+    plot_mean(df)
+    plot_per_property(df)
 
 
 if __name__ == "__main__":
