@@ -162,9 +162,9 @@ def main() -> None:
         ncol=len(labels),
         frameon=False,
         fontsize=8,
-        bbox_to_anchor=(0.5, -0.06),
+        bbox_to_anchor=(0.5, -0.02),
     )
-    fig.tight_layout(rect=(0, 0.1, 1, 1))
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
 
     pdf_path = FIGS / "basket_vs_singles_pooled_cosmos1024.pdf"
     fig.savefig(pdf_path, bbox_inches="tight")
