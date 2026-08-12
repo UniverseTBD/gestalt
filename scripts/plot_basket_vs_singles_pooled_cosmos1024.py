@@ -92,7 +92,7 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
         capsize=1.5,
         capthick=0.6,
         elinewidth=0.6,
-        label="single model (PCA)",
+        label="single model",
     )
 
     for src, arr in baskets.items():
@@ -106,7 +106,6 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
     ax.scatter(
         [best], [means[best]], color="#2ca02c", s=55, marker="*", zorder=5, label="best single"
     )
-    ax.axhline(float(np.median(means)), color="#7f7f7f", lw=0.9, ls="--", label="median single")
 
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=80, ha="right", fontsize=4.5)
