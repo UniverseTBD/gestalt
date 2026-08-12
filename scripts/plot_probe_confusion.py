@@ -80,9 +80,7 @@ def _resolve_parquet() -> tuple[Path, str]:
     raise FileNotFoundError("neither data/probes_1024.parquet nor data/probes_smoke.parquet exists")
 
 
-def _member_values(
-    df: pd.DataFrame, modality: str, prop_i: str, prop_j: str
-) -> np.ndarray:
+def _member_values(df: pd.DataFrame, modality: str, prop_i: str, prop_j: str) -> np.ndarray:
     singles = sorted(source for source in df["source"].unique() if source.startswith("single_"))
     if len(singles) != 22:
         raise ValueError(f"expected 22 single-model sources, found {len(singles)}")
@@ -137,13 +135,14 @@ def _plot_panel(ax, df: pd.DataFrame, modality: str) -> None:
             s=24,
             zorder=3,
         )
+        below = (prop_i, prop_j) == ("redshift", "sSFR")
         ax.annotate(
             f"{gestalt:+.2f}",
             (position, gestalt),
-            xytext=(0, 4),
+            xytext=(0, -4 if below else 4),
             textcoords="offset points",
             ha="center",
-            va="bottom",
+            va="top" if below else "bottom",
             fontsize=VALUE_SIZE,
             color="#222222",
             zorder=4,
