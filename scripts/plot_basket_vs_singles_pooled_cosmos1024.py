@@ -27,6 +27,13 @@ import numpy as np
 import pandas as pd
 from scipy.stats import wilcoxon
 
+matplotlib.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Helvetica", "Nimbus Sans", "DejaVu Sans"],
+    }
+)
+
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
 FIGS = REPO / "assets" / "plots"
@@ -38,6 +45,8 @@ BASKET_STYLE = {
     "basket_mcca_whitened": {"label": "Basket (MCCA, whitened)", "color": "#ff7f0e"},
     "basket_concat_pca": {"label": r"Basket (concat$\to$PCA)", "color": "#17becf"},
 }
+FIG_WIDTH_IN = 396 / 72
+FIG_HEIGHT_IN = 2.5
 
 
 def _inward_ticks(ax) -> None:
@@ -143,7 +152,7 @@ def main() -> None:
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=True)
     for i, modality in enumerate(MODALITIES):
         ax = axes[i]
         singles, baskets = cell_pivot(df, modality)
@@ -159,12 +168,12 @@ def main() -> None:
         ncol=len(labels),
         frameon=False,
         fontsize=8,
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.02),
     )
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
 
     pdf_path = FIGS / "basket_vs_singles_pooled_cosmos1024.pdf"
-    fig.savefig(pdf_path, bbox_inches="tight")
+    fig.savefig(pdf_path)
     plt.close(fig)
     print(f"Wrote {pdf_path}")
 
