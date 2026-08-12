@@ -108,8 +108,7 @@ def plot_cell(ax, singles: dict, baskets: dict) -> None:
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=80, ha="right", fontsize=4.5)
-    ax.grid(True, alpha=0.25)
+    ax.set_xticklabels(names, rotation=80, ha="right", fontsize=6)
     _inward_ticks(ax)
 
 
@@ -159,16 +158,12 @@ def main() -> None:
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 4.2), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.6), sharey=True)
     for i, modality in enumerate(MODALITIES):
         ax = axes[i]
         singles, baskets = cell_pivot(df, modality)
         plot_cell(ax, singles, baskets)
-        ax.set_title(
-            f"{MODALITY_LABEL[modality]} — mean over "
-            r"$\{z_{\rm phot}, \log M_\star, {\rm sSFR}\}$",
-            fontsize=9,
-        )
+        ax.set_title(MODALITY_LABEL[modality], fontsize=9)
         if i == 0:
             ax.set_ylabel(r"$R^2$")
     handles, labels = _dedup_legend(axes.ravel())
