@@ -41,7 +41,7 @@ BASKET_STYLE = {
     "basket_mcca_whitened": {"label": "Gestalt", "color": "#ff7f0e"},
 }
 FIG_WIDTH_IN = 396 / 72
-FIG_HEIGHT_IN = 2.5
+FIG_HEIGHT_IN = 2.1
 TITLE_SIZE = 9
 TICK_SIZE = 7.5
 LABEL_SIZE = 10
@@ -152,10 +152,10 @@ def plot_mean(df: pd.DataFrame) -> None:
         ncol=len(labels),
         columnspacing=0.6,
         handletextpad=0.2,
-        bbox_to_anchor=(0.5, 0.18),
+        bbox_to_anchor=(0.5, 0.08),
         frameon=False,
     )
-    fig.subplots_adjust(left=0.128, right=0.974, bottom=0.48, top=0.87, wspace=0.18)
+    fig.subplots_adjust(left=0.128, right=0.974, bottom=0.386, top=0.85, wspace=0.18)
     out = FIGS / "scaling_curves.pdf"
     fig.savefig(out, dpi=300)
     print(f"Saved {out}")
