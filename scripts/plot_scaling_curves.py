@@ -136,7 +136,7 @@ def _plot_panel(
 
 
 def plot_mean(df: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=False)
     for ax, modality in zip(axes, MODALITIES):
         _plot_panel(ax, df, modality, PROPERTIES, MODALITY_LABEL[modality])
         ax.set_xlabel("basket size $k$", fontsize=LABEL_SIZE)
@@ -152,10 +152,10 @@ def plot_mean(df: pd.DataFrame) -> None:
         ncol=len(labels),
         columnspacing=0.6,
         handletextpad=0.2,
-        bbox_to_anchor=(0.5, 0.02),
+        bbox_to_anchor=(0.5, 0.18),
         frameon=False,
     )
-    fig.subplots_adjust(left=0.115, right=0.974, bottom=0.48, top=0.87, wspace=0.06)
+    fig.subplots_adjust(left=0.128, right=0.974, bottom=0.48, top=0.87, wspace=0.18)
     out = FIGS / "scaling_curves.pdf"
     fig.savefig(out, dpi=300)
     print(f"Saved {out}")

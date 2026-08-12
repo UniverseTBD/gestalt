@@ -152,7 +152,7 @@ def main() -> None:
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
 
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=False)
     for i, modality in enumerate(MODALITIES):
         ax = axes[i]
         singles, baskets = cell_pivot(df, modality)
