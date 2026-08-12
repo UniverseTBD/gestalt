@@ -1,47 +1,54 @@
 #!/usr/bin/env python3
-"""3×3 cosine confusion heatmaps for `bench probes`.
+"""Plot member-model cosine ranges and Gestalt probe geometry.
 
-3×3 RdBu_r heatmap with cell text, laid out as a tight
-2 (modality) × 3 (source) grid sized to fit the cosmos figure family.
+The combined 3×3 matrix puts HSC in the lower triangle and JWST in the
+upper triangle. Each off-diagonal cell shows the signed min–max range across
+22 single models and the corresponding Gestalt value.
 
-Columns:
-  1. `basket_mcca_whitened` — the canonical Bazaar projection.
-  2. `basket_avg` — element-wise mean of the basket members' coefficient
-     vectors (then probed).
-  3. Median single — element-wise median over the 22 `single_*` cosine
-     matrices, summarising "what a typical single model looks like."
-
-Falls back to `data/probes_smoke.parquet` (D=256) with a `_smoke`
-filename suffix if `data/probes_1024.parquet` is not yet present.
+Reads ``data/probes_1024.parquet`` and writes
+``assets/plots/probes_confusion.pdf``. A smoke parquet is supported as a
+fallback and produces a ``_smoke`` suffixed output.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
+
+matplotlib.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Helvetica", "Nimbus Sans", "DejaVu Sans"],
+    }
+)
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
 FIGS = REPO / "assets" / "plots"
 
-MODALITIES = ["hsc", "jwst"]
-MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
-PROPERTIES = ["redshift", "mass", "sSFR"]
+MODALITIES = ("hsc", "jwst")
+PROPERTIES = ("redshift", "mass", "sSFR")
 PROPERTY_LABEL = {
     "redshift": r"$z$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     "sSFR",
+    "mass": r"$\log M_\star$",
+    "sSFR": "sSFR",
 }
 
-COLUMNS = [
-    ("basket_mcca_whitened", "MCCA basket"),
-    ("basket_avg",            "Basket avg"),
-    ("__median_single__",     "Median single"),
-]
+FIG_WIDTH_IN = 396 / 72
+FIG_HEIGHT_IN = 2.5
+RANGE_COLOR = "#7f7f7f"
+GESTALT_COLOR = "#ff7f0e"
+ZERO_COLOR = "#b0b0b0"
+DIAGONAL_COLOR = "#ffffff"
+CELL_HALF_WIDTH = 0.40
 
 
 def _inward_ticks(ax) -> None:
@@ -52,74 +59,24 @@ def _inward_ticks(ax) -> None:
 
 def _pivot_cos(df: pd.DataFrame, modality: str, source: str) -> np.ndarray:
     sub = df[(df["modality"] == modality) & (df["source"] == source)]
-    idx = {p: i for i, p in enumerate(PROPERTIES)}
-    M = np.full((3, 3), np.nan, dtype=np.float32)
-    for r in sub.itertuples(index=False):
-        M[idx[r.prop_i], idx[r.prop_j]] = r.cos
-    return M
+    if len(sub) != len(PROPERTIES) ** 2:
+        raise ValueError(f"expected 9 cosine cells for {modality}/{source}, found {len(sub)}")
+
+    index = {prop: i for i, prop in enumerate(PROPERTIES)}
+    matrix = np.full((len(PROPERTIES), len(PROPERTIES)), np.nan, dtype=np.float64)
+    for row in sub.itertuples(index=False):
+        matrix[index[row.prop_i], index[row.prop_j]] = row.cos
+    if not np.isfinite(matrix).all():
+        raise ValueError(f"incomplete cosine matrix for {modality}/{source}")
+    return matrix
 
 
-def _median_single(df: pd.DataFrame, modality: str) -> np.ndarray:
-    singles = sorted(
-        s for s in df["source"].unique() if s.startswith("single_")
-    )
-    if not singles:
-        raise ValueError(f"no single_* sources for modality={modality!r}")
-    stack = np.stack(
-        [_pivot_cos(df, modality, s) for s in singles], axis=0,
-    )
-    return np.nanmedian(stack, axis=0)
-
-
-def _combine_triangles(M_hsc: np.ndarray, M_jwst: np.ndarray) -> np.ndarray:
-    """Lower triangle = HSC, upper triangle = JWST, diagonal = 1.0.
-
-    Both modalities are expected to have a self-cosine of +1 on the
-    diagonal; we take JWST's diagonal but they agree to float-precision.
-    """
-    M = np.empty_like(M_hsc)
-    for i in range(M.shape[0]):
-        for j in range(M.shape[1]):
-            if i > j:
-                M[i, j] = M_hsc[i, j]
-            elif i < j:
-                M[i, j] = M_jwst[i, j]
-            else:
-                M[i, j] = M_jwst[i, j]
-    return M
-
-
-def _plot_heatmap(ax, M: np.ndarray, *, vmax: float = 1.0):
-    im = ax.imshow(M, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    ax.set_xticks(range(3))
-    ax.set_yticks(range(3))
-    labels = [PROPERTY_LABEL[p] for p in PROPERTIES]
-    ax.set_xticklabels(labels, fontsize=9)
-    ax.set_yticklabels(labels, fontsize=9)
-    for i in range(3):
-        for j in range(3):
-            if i == j:
-                continue
-            v = M[i, j]
-            if not np.isfinite(v):
-                continue
-            ax.text(
-                j, i, f"{v:+.2f}",
-                ha="center", va="center",
-                color="black" if abs(v) < 0.55 else "white",
-                fontsize=9,
-            )
-    # Diagonal separator + triangle labels (placed slightly off the
-    # diagonal in each triangle).
-    ax.plot([-0.5, 2.5], [-0.5, 2.5], color="white", lw=2.5, zorder=3)
-    ax.text(1.55, 0.45, "JWST", color="white",
-            ha="center", va="center", fontsize=10, fontweight="bold",
-            fontstyle="italic", zorder=4)
-    ax.text(0.45, 1.55, "HSC", color="white",
-            ha="center", va="center", fontsize=10, fontweight="bold",
-            fontstyle="italic", zorder=4)
-    _inward_ticks(ax)
-    return im
+def _member_ranges(df: pd.DataFrame, modality: str) -> tuple[np.ndarray, np.ndarray]:
+    singles = sorted(source for source in df["source"].unique() if source.startswith("single_"))
+    if len(singles) != 22:
+        raise ValueError(f"expected 22 single-model sources, found {len(singles)}")
+    stack = np.stack([_pivot_cos(df, modality, source) for source in singles])
+    return np.min(stack, axis=0), np.max(stack, axis=0)
 
 
 def _resolve_parquet() -> tuple[Path, str]:
@@ -139,35 +96,138 @@ def _resolve_parquet() -> tuple[Path, str]:
     )
 
 
+def _cell_x(column: int, value: float) -> float:
+    return column + CELL_HALF_WIDTH * value
+
+
+def _plot_range_cell(ax, row: int, column: int, low: float, high: float, gestalt: float) -> None:
+    """Draw one local [-1, 1] range axis inside a matrix cell."""
+    left = _cell_x(column, low)
+    right = _cell_x(column, high)
+    zero = _cell_x(column, 0.0)
+    point = _cell_x(column, gestalt)
+
+    ax.plot([zero, zero], [row - 0.13, row + 0.13], color=ZERO_COLOR, lw=0.6, zorder=1)
+    ax.plot(
+        [left, right],
+        [row, row],
+        color=RANGE_COLOR,
+        lw=2.0,
+        solid_capstyle="round",
+        zorder=2,
+    )
+    ax.plot([left, left], [row - 0.07, row + 0.07], color=RANGE_COLOR, lw=1.0, zorder=2)
+    ax.plot([right, right], [row - 0.07, row + 0.07], color=RANGE_COLOR, lw=1.0, zorder=2)
+    ax.scatter(
+        [point],
+        [row],
+        color=GESTALT_COLOR,
+        edgecolor="white",
+        linewidth=0.5,
+        s=24,
+        zorder=3,
+    )
+
+    # Keep the value toward the outside of its triangle, away from the
+    # diagonal and the neighboring cell's annotation.
+    text_row = row - 0.19 if row < column else row + 0.19
+    ax.text(
+        point,
+        text_row,
+        f"{gestalt:+.2f}",
+        ha="center",
+        va="center",
+        fontsize=7.5,
+        color="#222222",
+        zorder=4,
+    )
+
+
+def _plot_matrix(ax, df: pd.DataFrame) -> None:
+    ranges = {modality: _member_ranges(df, modality) for modality in MODALITIES}
+    gestalt = {
+        modality: _pivot_cos(df, modality, "basket_mcca_whitened") for modality in MODALITIES
+    }
+
+    for diagonal in range(len(PROPERTIES)):
+        ax.add_patch(
+            Rectangle(
+                (diagonal - 0.5, diagonal - 0.5),
+                1,
+                1,
+                facecolor="#f1f1f1",
+                edgecolor="none",
+                zorder=0,
+            )
+        )
+
+    for row in range(len(PROPERTIES)):
+        for column in range(len(PROPERTIES)):
+            if row == column:
+                continue
+            modality = "hsc" if row > column else "jwst"
+            low, high = ranges[modality]
+            _plot_range_cell(ax, row, column, low[row, column], high[row, column], gestalt[modality][row, column])
+
+    ax.plot(
+        [-0.5, len(PROPERTIES) - 0.5],
+        [-0.5, len(PROPERTIES) - 0.5],
+        color=DIAGONAL_COLOR,
+        lw=2.0,
+        zorder=5,
+    )
+    ax.text(1.62, 0.34, "JWST", color="#555555", fontsize=7.5, fontstyle="italic", zorder=6)
+    ax.text(0.34, 1.66, "HSC", color="#555555", fontsize=7.5, fontstyle="italic", zorder=6)
+
+    labels = [PROPERTY_LABEL[prop] for prop in PROPERTIES]
+    ax.set_xlim(-0.5, len(PROPERTIES) - 0.5)
+    ax.set_ylim(len(PROPERTIES) - 0.5, -0.5)
+    ax.set_xticks(range(len(PROPERTIES)), labels=labels)
+    ax.set_yticks(range(len(PROPERTIES)), labels=labels)
+    ax.xaxis.tick_top()
+    ax.tick_params(axis="both", which="major", labelsize=8, pad=2, length=3)
+    ax.tick_params(axis="both", which="minor", length=0)
+    _inward_ticks(ax)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.7)
+
+
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
     parquet_path, suffix = _resolve_parquet()
     df = pd.read_parquet(parquet_path)
 
-    fig, axes = plt.subplots(1, len(COLUMNS), figsize=(8.5, 3.2))
-    last_im = None
-    for c, (src_key, col_label) in enumerate(COLUMNS):
-        ax = axes[c]
-        if src_key == "__median_single__":
-            M_hsc = _median_single(df, "hsc")
-            M_jwst = _median_single(df, "jwst")
-        else:
-            M_hsc = _pivot_cos(df, "hsc", src_key)
-            M_jwst = _pivot_cos(df, "jwst", src_key)
-        M = _combine_triangles(M_hsc, M_jwst)
-        last_im = _plot_heatmap(ax, M)
-        ax.set_title(col_label, fontsize=11)
+    fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN))
+    _plot_matrix(ax, df)
 
-    fig.tight_layout()
-    plt.subplots_adjust(right=0.90, wspace=0.30)
-    cbar_ax = fig.add_axes([0.92, 0.18, 0.02, 0.66])
-    fig.colorbar(
-        last_im, cax=cbar_ax,
-        label="cosine of probe coefficients",
+    handles = [
+        Line2D([0], [0], color=RANGE_COLOR, lw=2.0, label="22 member range"),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="none",
+            markerfacecolor=GESTALT_COLOR,
+            markeredgecolor="white",
+            markeredgewidth=0.5,
+            markersize=5,
+            label="Gestalt",
+        ),
+    ]
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=2,
+        fontsize=8,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.02),
+        handletextpad=0.35,
+        columnspacing=1.0,
     )
+    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.24, top=0.88)
 
     out = FIGS / f"probes_confusion{suffix}.pdf"
-    fig.savefig(out, dpi=300, bbox_inches="tight")
+    fig.savefig(out)
     print(f"Saved {out}")
     plt.close(fig)
 
