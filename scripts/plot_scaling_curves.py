@@ -136,7 +136,7 @@ def _plot_panel(
 
 
 def plot_mean(df: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=False)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=True)
     for ax, modality in zip(axes, MODALITIES):
         _plot_panel(ax, df, modality, PROPERTIES, MODALITY_LABEL[modality])
         ax.set_xlabel("basket size $k$", fontsize=LABEL_SIZE)
