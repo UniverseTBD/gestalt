@@ -28,7 +28,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
-FIGS = REPO / "figs"
+FIGS = REPO / "assets" / "plots"
 
 FIT_SOURCES = ["cosmos-hsc", "cosmos-jwst", "gz10", "galaxies"]
 TARGETS = ["cosmos-hsc", "cosmos-jwst", "gz10", "galaxies"]

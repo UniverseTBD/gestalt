@@ -28,7 +28,7 @@ from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
-FIGS = REPO / "figs"
+FIGS = REPO / "assets" / "plots"
 
 MODALITIES = ["hsc", "jwst"]
 PROPERTIES = ["redshift", "mass", "sSFR"]

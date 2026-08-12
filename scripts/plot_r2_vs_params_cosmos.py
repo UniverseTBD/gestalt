@@ -22,7 +22,7 @@ from scipy.stats import spearmanr
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
-FIGS = REPO / "figs"
+FIGS = REPO / "assets" / "plots"
 
 # Parameter counts copied verbatim from pu/scripts/plot_r2_vs_params.py.
 PARAM_COUNTS = {

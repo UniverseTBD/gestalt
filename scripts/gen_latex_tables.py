@@ -18,7 +18,7 @@ from scipy.optimize import curve_fit
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
-FIGS = REPO / "figs"
+FIGS = REPO / "assets" / "plots"
 
 
 PROPERTY_LABEL = {

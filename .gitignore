@@ -8,7 +8,7 @@ dist/
 
 # experiment artefacts (top-level only — don't shadow package data dirs)
 /data/
-/figs/
+/assets/plots/
 /analysis/
 /embeds/
 /embeds_galaxies/

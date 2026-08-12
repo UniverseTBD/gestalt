@@ -26,7 +26,7 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
-FIGS = REPO / "figs"
+FIGS = REPO / "assets" / "plots"
 
 MODALITIES = ["hsc", "jwst"]
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
