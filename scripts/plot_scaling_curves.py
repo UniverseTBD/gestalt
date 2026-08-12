@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Scaling curves: R² vs basket size k for `bench scaling`.
 
-One error-bar curve per `subset_kind ∈ {random, one_per_family}`, plus
-best-single and median-single horizontal references. Sized and palette-
-matched to the cosmos figure family:
-
-  - figsize `(7.5, 3.0)` for the 2-panel mean figure (cosmos `plot_mean`);
-  - figsize `(11, 5.2)` for the 2×3 per-property grid;
-  - orange MCCA basket palette;
-  - top-of-figure dedup legend; inward ticks; grid at alpha 0.25.
+One clean line per `subset_kind ∈ {random, one_per_family}`, plus
+best-single and median-single horizontal references. The main two-panel
+figure uses the compact 396pt paper layout and the Figure 1 visual theme.
 
 Best/median-single references are read from `data/cosmos_1024.parquet`
 so the basket-vs-single line matches the canonical D=1024 sweep used by
@@ -19,10 +14,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+matplotlib.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Helvetica", "Nimbus Sans", "DejaVu Sans"],
+    }
+)
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
@@ -38,9 +41,10 @@ PROPERTY_LABEL = {
 }
 
 BASKET_STYLE = {
-    "basket_mcca_whitened": {"label": "Basket (MCCA, whitened)",
-                              "color": "#ff7f0e"},
+    "basket_mcca_whitened": {"label": "Gestalt", "color": "#ff7f0e"},
 }
+FIG_WIDTH_IN = 396 / 72
+FIG_HEIGHT_IN = 2.5
 
 SUBSET_STYLE = {
     "random":         {"label": "random", "marker": "o", "linestyle": "-"},
@@ -69,8 +73,8 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 def _scaling_curve(
     df: pd.DataFrame, modality: str, props: list[str], subset_kind: str
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Mean ± SE of R² (across (subset_id, seed, property)) at each k for one curve.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mean R² (across (subset_id, seed, property)) at each k for one curve.
 
     The `subset_kind=full` row at k=22 is folded in so each curve
     terminates at the all-22 basket value.
@@ -82,13 +86,12 @@ def _scaling_curve(
         & (df["subset_kind"].isin([subset_kind, "full"]))
     ]
     if sub.empty:
-        return np.array([]), np.array([]), np.array([])
+        return np.array([]), np.array([])
     ks = sorted(sub["k"].unique())
     means = np.full(len(ks), np.nan, dtype=np.float64)
-    ses = np.full(len(ks), np.nan, dtype=np.float64)
     for i, k in enumerate(ks):
         # average over properties within each (subset_id, seed) first so
-        # the SE reflects between-seed/draw variability, not between-prop.
+        # the mean reflects between-seed/draw variability, not between-prop.
         per_draw = (
             sub[sub["k"] == k]
             .groupby(["subset_id", "seed"])["r2"]
@@ -99,9 +102,7 @@ def _scaling_curve(
         if per_draw.size == 0:
             continue
         means[i] = per_draw.mean()
-        n = per_draw.size
-        ses[i] = per_draw.std(ddof=1) / np.sqrt(n) if n > 1 else 0.0
-    return np.asarray(ks, dtype=float), means, ses
+    return np.asarray(ks, dtype=float), means
 
 
 def _single_refs(
@@ -134,24 +135,21 @@ def _plot_panel(
 ) -> None:
     color = BASKET_STYLE[SOURCE]["color"]
     for kind in SUBSET_KINDS:
-        ks, means, ses = _scaling_curve(df, modality, props, kind)
+        ks, means = _scaling_curve(df, modality, props, kind)
         if ks.size == 0:
             continue
         style = SUBSET_STYLE[kind]
-        ax.errorbar(
-            ks, means, yerr=ses,
+        ax.plot(
+            ks, means,
             color=color, marker=style["marker"], linestyle=style["linestyle"],
-            ms=5, capsize=2, capthick=0.7, elinewidth=0.7, lw=1.2,
-            label=f"MCCA, {style['label']}",
+            ms=4, lw=1.2, label=f"Gestalt, {style['label']}",
         )
 
     best, median = _single_refs(cosmos_df, modality, props)
     if np.isfinite(best):
-        ax.axhline(best, color="#2ca02c", lw=1.0, ls=":",
-                   label=f"best single = {best:.3f}")
+        ax.axhline(best, color="#2ca02c", lw=1.0, ls=":", label="best single")
     if np.isfinite(median):
-        ax.axhline(median, color="#7f7f7f", lw=1.0, ls="--",
-                   label=f"median single = {median:.3f}")
+        ax.axhline(median, color="#7f7f7f", lw=1.0, ls="--", label="median single")
 
     ks_all = sorted(df["k"].dropna().unique())
     if ks_all:
@@ -159,30 +157,31 @@ def _plot_panel(
         ax.set_xticks(ks_all)
         ax.set_xticklabels([str(int(k)) for k in ks_all])
         ax.minorticks_off()
-    ax.set_title(title, fontsize=11)
+    ax.set_title(title, fontsize=9)
+    ax.tick_params(labelsize=8)
     _inward_ticks(ax)
 
 
 def plot_mean(df: pd.DataFrame, cosmos_df: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.0), sharey=False)
+    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=False)
     for ax, modality in zip(axes, MODALITIES):
         _plot_panel(ax, df, cosmos_df, modality, PROPERTIES,
                     MODALITY_LABEL[modality])
-        ax.set_xlabel("basket size $k$", fontsize=10)
+        ax.set_xlabel("basket size $k$", fontsize=9)
         if ax is axes[0]:
-            ax.set_ylabel(r"Mean $R^2$", fontsize=10)
+            ax.set_ylabel(r"Mean $R^2$", fontsize=9)
 
     handles, labels = _dedup_legend(axes)
     fig.legend(
         handles, labels,
-        loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
+        loc="lower center", fontsize=7.5, ncol=len(labels),
         columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.52, 1.12), frameon=False,
+        bbox_to_anchor=(0.5, 0.02), frameon=False,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     plt.subplots_adjust(wspace=0.22)
     out = FIGS / "scaling_curves.pdf"
-    fig.savefig(out, dpi=300, bbox_inches="tight")
+    fig.savefig(out, dpi=300)
     print(f"Saved {out}")
     plt.close(fig)
 
