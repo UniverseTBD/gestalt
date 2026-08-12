@@ -42,7 +42,7 @@ MODALITIES = ["hsc", "jwst"]
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
 
 BASKET_STYLE = {
-    "basket_mcca_whitened": {"label": "Basket (MCCA, whitened)", "color": "#ff7f0e"},
+    "basket_mcca_whitened": {"label": "Gestalt", "color": "#ff7f0e"},
     "basket_concat_pca": {"label": r"Basket (concat$\to$PCA)", "color": "#17becf"},
 }
 FIG_WIDTH_IN = 396 / 72
