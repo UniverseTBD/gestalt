@@ -155,8 +155,7 @@ def plot_mean(df: pd.DataFrame) -> None:
         bbox_to_anchor=(0.5, 0.02),
         frameon=False,
     )
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
-    plt.subplots_adjust(wspace=0.22)
+    fig.subplots_adjust(left=0.115, right=0.974, bottom=0.48, top=0.87, wspace=0.06)
     out = FIGS / "scaling_curves.pdf"
     fig.savefig(out, dpi=300)
     print(f"Saved {out}")
