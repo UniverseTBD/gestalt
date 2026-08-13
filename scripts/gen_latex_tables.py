@@ -55,16 +55,17 @@ MODEL_LABELS = {
     "ijepa_giant": "I-JEPA 1B",
     "llava_15_7b": "LLaVA-1.5 7B",
     "llava_15_13b": "LLaVA-1.5 13B",
-    "vit_base": "ViT 86M",
-    "vit_large": "ViT 304M",
-    "vit_huge": "ViT 632M",
     "vit-mae_base": "ViT-MAE 86M",
     "vit-mae_large": "ViT-MAE 304M",
     "vit-mae_huge": "ViT-MAE 632M",
+    "vit_base": "ViT 86M",
+    "vit_large": "ViT 304M",
+    "vit_huge": "ViT 632M",
     "vjepa_large": "V-JEPA-2 300M",
     "vjepa_huge": "V-JEPA-2 600M",
     "vjepa_giant": "V-JEPA-2 1B",
 }
+MODEL_ORDER = {model: rank for rank, model in enumerate(MODEL_LABELS)}
 
 
 def clean_source(src: str) -> str:
@@ -91,8 +92,14 @@ BASKET_ORDER = {
 }
 
 
-def order_key(src: str) -> tuple[int, int, str]:
-    return (0 if is_basket(src) else 1, BASKET_ORDER.get(src, 0), src)
+def order_key(src: str) -> tuple[int, int, int, str]:
+    model = src.removeprefix("single_").rsplit("_pca", 1)[0]
+    return (
+        0 if is_basket(src) else 1,
+        BASKET_ORDER.get(src, 0),
+        MODEL_ORDER.get(model, len(MODEL_ORDER)),
+        src,
+    )
 
 
 def aggregate(df: pd.DataFrame, metric: str) -> pd.DataFrame:
@@ -371,10 +378,9 @@ def render_scaling_fits() -> str:
     lines.append(r"\small")
     lines.append(r"\setlength{\tabcolsep}{6pt}")
     lines.append(r"\caption{Fitted basket-size scaling law "
-                 r"$R^2(k) = R^2_\infty - A\,k^{-\alpha}$ to the per-$k$ mean "
-                 r"$R^2$ values in Table~\ref{tab:scaling-values}. RMSE is the "
-                 r"residual on those means (units of $R^2$); fits require at least "
-                 r"four basket sizes, so one-per-family rows are undefined.}")
+                 r"$R^2(k) = R^2_\infty - A\,k^{-\alpha}$ to the random-sub-basket "
+                 r"means in Table~\ref{tab:scaling-values}. RMSE is the "
+                 r"residual on those means (units of $R^2$).}")
     lines.append(r"\label{tab:scaling-fits}")
     lines.append(r"\begin{tabular}{lllcccc}")
     lines.append(r"\toprule")
@@ -388,26 +394,23 @@ def render_scaling_fits() -> str:
         first_in_modality = False
         first_in_mod_block = True
         for prop in SCALING_PROPS:
-            for ki, kind in enumerate(SCALING_KINDS):
-                sub = agg[(agg["modality"] == mod)
-                          & (agg["property"] == prop)
-                          & (agg["subset_kind"] == kind)].sort_values("k")
-                ks = sub["k"].to_numpy()
-                means = sub["mean"].to_numpy()
-                if len(ks) < 4:
-                    cells = ["--"] * 4
-                else:
-                    R_inf, A, alpha, rmse = _fit_scaling_law(ks, means)
-                    cells = [f"${R_inf:.3f}$", f"${A:.3f}$",
-                             f"${alpha:.2f}$", f"${rmse:.4f}$"]
-                row = [
-                    SCALING_MODALITY_LABEL[mod] if first_in_mod_block else "",
-                    SCALING_PROP_LABEL[prop] if ki == 0 else "",
-                    SCALING_KIND_LABEL[kind],
-                    *cells,
-                ]
-                lines.append(" & ".join(row) + r" \\")
-                first_in_mod_block = False
+            sub = agg[(agg["modality"] == mod)
+                      & (agg["property"] == prop)
+                      & (agg["subset_kind"] == "random")].sort_values("k")
+            R_inf, A, alpha, rmse = _fit_scaling_law(
+                sub["k"].to_numpy(), sub["mean"].to_numpy()
+            )
+            row = [
+                SCALING_MODALITY_LABEL[mod] if first_in_mod_block else "",
+                SCALING_PROP_LABEL[prop],
+                SCALING_KIND_LABEL["random"],
+                f"${R_inf:.3f}$",
+                f"${A:.3f}$",
+                f"${alpha:.2f}$",
+                f"${rmse:.4f}$",
+            ]
+            lines.append(" & ".join(row) + r" \\")
+            first_in_mod_block = False
 
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
