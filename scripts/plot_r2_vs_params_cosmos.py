@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -297,6 +298,7 @@ def plot_per_property(df: pd.DataFrame) -> None:
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
     df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = df[df["seed"] < 5]
     plot_mean(df)
     plot_per_property(df)
 

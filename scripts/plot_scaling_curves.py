@@ -203,6 +203,7 @@ def plot_per_property(df: pd.DataFrame) -> None:
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
     df = pd.read_parquet(DATA / "scaling.parquet")
+    df = df[df["seed"] < 5]
     plot_mean(df)
     plot_per_property(df)
 

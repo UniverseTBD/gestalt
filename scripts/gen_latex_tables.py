@@ -152,7 +152,7 @@ def render_table(
 
 def render_cosmos() -> str:
     df = pd.read_parquet(DATA / "cosmos_1024.parquet")
-    df = df.copy()
+    df = df[df["seed"] < 5].copy()
     df["property"] = df["modality"].astype(str) + ":" + df["property"].astype(str)
     properties = ["hsc:redshift", "hsc:mass", "hsc:sSFR",
                   "jwst:redshift", "jwst:mass", "jwst:sSFR"]
@@ -171,7 +171,7 @@ def render_cosmos() -> str:
     return render_table(
         wide, properties,
         caption=(r"COSMOS-Web HSC$\times$JWST linear probe $R^2$ on 45\,000 galaxies "
-                 r"(PCA-1024, $z$-scored; 10 probe seeds)."),
+                 r"(PCA-1024, $z$-scored; 5 repeated random train--test splits)."),
         label="tab:cosmosweb",
         source_order=source_order,
         metric_name=r"$R^2$",
@@ -287,7 +287,7 @@ def _fit_scaling_law(ks: np.ndarray, means: np.ndarray) -> tuple[float, float, f
 
 def render_scaling_values() -> str:
     df = pd.read_parquet(DATA / "scaling.parquet")
-    agg = _scaling_means(df)
+    agg = _scaling_means(df[df["seed"] < 5])
     cell = {
         (r["modality"], r["property"], r["subset_kind"], int(r["k"])): (r["mean"], r["std"])
         for r in agg.to_dict("records")
@@ -300,7 +300,7 @@ def render_scaling_values() -> str:
     lines.append(r"\setlength{\tabcolsep}{4pt}")
     lines.append(r"\caption{COSMOS-Web basket-pruning $R^2$ vs basket size $k$ "
                  r"(MCCA-whitened fusion; mean $\pm$ std across subset draws and "
-                 r"probe seeds). The $k{=}22$ column is the single full-basket "
+                 r"five repeated probe splits). The $k{=}22$ column is the single full-basket "
                  r"value, folded into both subset policies; one-per-family is "
                  r"undefined for $k{>}8$ (only 8 model families).}")
     lines.append(r"\label{tab:scaling-values}")
@@ -340,7 +340,7 @@ def render_scaling_values() -> str:
 
 def render_scaling_fits() -> str:
     df = pd.read_parquet(DATA / "scaling.parquet")
-    agg = _scaling_means(df)
+    agg = _scaling_means(df[df["seed"] < 5])
 
     lines: list[str] = []
     lines.append(r"\begin{table}[t]")

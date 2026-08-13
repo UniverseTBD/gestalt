@@ -2,7 +2,7 @@
 """Basket-vs-singles strip plot for the canonical COSMOS-Web D=1024 sweep.
 
 Per (modality, property) cell: every single model's probe R² (mean ± SE over
-seeds, sorted by mean) as a strip of points, with horizontal bands for the
+five seeds, sorted by mean) as a strip of points, with horizontal bands for the
 two basket sources (MCCA and concat→PCA), a star on the best single and a
 dashed line at the median single. Companion stats file tabulates per-cell
 means, basket ranks among the 23 sources, and paired two-sided Wilcoxon
@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -125,7 +126,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
         for prop in PROPERTIES:
             singles, baskets = cell_pivot(df, modality, prop)
             means = {n: a.mean() for n, a in singles.items()}
-            best_name = max(means, key=means.get)
+            best_name = max(means, key=lambda name: means[name])
             best_arr = singles[best_name]
             median_single = float(np.median(list(means.values())))
 
@@ -161,6 +162,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
 
 def main() -> None:
     df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = df[df["seed"] < 5]
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
 

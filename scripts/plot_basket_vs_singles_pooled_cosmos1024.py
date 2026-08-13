@@ -3,7 +3,7 @@
 
 Pre-collapse: for each (source, modality, seed) take the mean probe R² over
 {redshift, mass, sSFR}. The plotted dots are the mean of those 3 values
-(one per seed) with SE over the 10 seeds. Baskets (MCCA stitch, concat→PCA)
+(one per seed) with SE over five seeds. Baskets (MCCA stitch, concat→PCA)
 are drawn as horizontal bands off the same body of collapsed seed values.
 
 Companion file lists per-model means, ranks, and paired two-sided Wilcoxon
@@ -149,6 +149,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
 
 def main() -> None:
     df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = df[df["seed"] < 5]
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
 

@@ -69,7 +69,7 @@ def cmd_push(args: argparse.Namespace) -> int:
 
 def _add_cosmos_bench_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--D", type=int, default=256, help="PCA components per model")
-    p.add_argument("--n-seeds", type=int, default=10)
+    p.add_argument("--n-seeds", type=int, default=5)
     p.add_argument("--test-size", type=int, default=5000)
     p.add_argument("--n-use", type=int, default=45_000)
     p.add_argument("--out", type=Path, required=True,

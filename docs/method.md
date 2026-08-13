@@ -20,7 +20,7 @@ For each telescope `M ∈ {hsc, jwst}`:
      SVD pick a global subspace without an alignment step.
 4. **Linear probe** (`bazaar.bench.linear_probe.run_probe`) on each basket
    source and each single-model `Ẑ_m`, for `y ∈ {redshift, log M★, sSFR}`
-   and 10 random seeds.
+   and five repeated random splits.
 
 Output is long-form parquet: one row per `(modality, property, seed, source)`.
 
@@ -131,8 +131,10 @@ for "best achievable native R²" at full corpus size.
   D ∈ {128, 256} sweeps are retained as ablations (`results_pca256.parquet`);
   the D=256 sweep is also where the alignment-mode comparison lives
   (MCCA > Procrustes/GPA ≫ concat→PCA > best single ≫ naive mean).
-- `n_seeds`: 10. Each seed picks an independent train/test split via
-  `sklearn.model_selection.train_test_split(random_state=seed)`.
+- `n_seeds`: 5 (seeds 0--4). Each seed picks an independent train/test split via
+  `sklearn.model_selection.train_test_split(random_state=seed)`; these are repeated
+  holdouts, not disjoint cross-validation folds. Historical result parquets retain
+  seeds 5--9, but paper tables and figures filter to seeds 0--4.
 - `test_size`: 5 000.
 - `n_use`: 45 000 (the full pre-published embedding length).
 
@@ -140,6 +142,8 @@ for "best achievable native R²" at full corpus size.
 
 Per `(modality, property)`, we compute the paired Wilcoxon signed-rank
 test (two-sided, `zero_method="wilcox"`) between each basket source's
-10 seed-R²s and the 10 seed-R²s of the best single model (ranked by
+five seed-R²s and the five seed-R²s of the best single model (ranked by
 mean R²). Reported as `p_white` (`basket_mcca_whitened`) and `p_concat`
-(`basket_concat_pca`) in the stats table.
+(`basket_concat_pca`) in the stats table. With five pairs the smallest
+attainable exact two-sided p-value is 0.0625, so these tests are descriptive
+rather than evidence at the conventional 0.05 threshold.
