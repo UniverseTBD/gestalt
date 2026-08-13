@@ -3,7 +3,7 @@
 
 Pre-collapse: for each (source, modality, seed) take the mean probe R² over
 {redshift, mass, sSFR}. The plotted dots are the mean of those 3 values
-(one per seed) with SE over five seeds. Baskets (MCCA stitch, concat→PCA)
+(one per seed) with SE over five seeds. Gestalt and concat→PCA
 are drawn as horizontal bands off the same body of collapsed seed values.
 
 Companion file lists per-model means, ranks, and paired two-sided Wilcoxon

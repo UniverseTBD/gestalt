@@ -17,6 +17,7 @@ def test_model_order_and_scaling_fit_rows():
     labels = [_MODULE.clean_source(source) for source in sorted(sources, key=_MODULE.order_key)]
 
     assert labels == list(_MODULE.MODEL_LABELS.values())
+    assert _MODULE.clean_source("basket_mcca_whitened") == r"\textbf{Gestalt}"
 
     table = _MODULE.render_scaling_fits()
     assert "one/family" not in table

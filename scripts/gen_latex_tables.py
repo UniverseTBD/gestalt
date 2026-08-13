@@ -70,9 +70,9 @@ MODEL_ORDER = {model: rank for rank, model in enumerate(MODEL_LABELS)}
 
 def clean_source(src: str) -> str:
     if src == "basket_mcca_whitened":
-        return r"\textbf{Basket (MCCA)}"
+        return r"\textbf{Gestalt}"
     if src == "basket_mcca_mean":
-        return r"\textbf{Basket (MCCA mean)}"
+        return r"\textbf{Gestalt mean}"
     if src == "basket_concat_pca":
         return r"\textbf{Basket (concat$\to$PCA)}"
     if src.startswith("single_"):
@@ -202,8 +202,10 @@ def render_cosmos() -> str:
 
     return render_table(
         wide, properties,
-        caption=(r"COSMOS-Web HSC$\times$JWST linear probe $R^2$ on 45\,000 galaxies "
-                 r"(PCA-1024, $z$-scored; 5 repeated random train--test splits)."),
+        caption=(r"COSMOS-Web HSC$\times$JWST linear-probe $R^2$ on 45\,000 galaxies. "
+                 r"Gestalt retains each view's native width during per-view PCA and "
+                 r"$z$-scoring before MCCA; single-model controls use PCA-to-at-most-1024 "
+                 r"and $z$-scoring (5 repeated random train--test splits)."),
         label="tab:cosmosweb",
         source_order=source_order,
         metric_name=r"$R^2$",
@@ -236,8 +238,10 @@ def render_gz10() -> str:
     return render_table(
         wide, properties,
         caption=(r"Galaxy Zoo 10 (UniverseTBD/mmu\_gz10) linear-probe scores: "
-                 r"macro $F_1$ for the 10-way morphology classification and "
-                 r"$R^2$ for photometric redshift (PCA-1024, $z$-scored; 5 probe seeds)."),
+                 r"macro $F_1$ for 10-way morphology and $R^2$ for photometric redshift. "
+                 r"Gestalt retains each view's native width during per-view PCA and "
+                 r"$z$-scoring before MCCA; single-model controls use PCA-to-at-most-1024 "
+                 r"and $z$-scoring (5 probe seeds)."),
         label="tab:gz10",
         source_order=source_order,
         metric_name=r"macro $F_1$ / $R^2$",
@@ -260,7 +264,9 @@ def render_galaxies() -> str:
     return render_table(
         wide, properties,
         caption=(r"Smith42/galaxies (v2.0) linear-probe $R^2$ on 13 paper-faithful "
-                 r"regression targets (PCA-1024, $z$-scored; 5 probe seeds)."),
+                 r"regression targets. Gestalt retains each view's native width during "
+                 r"per-view PCA and $z$-scoring before MCCA; single-model controls use "
+                 r"PCA-to-at-most-1024 and $z$-scoring (5 probe seeds)."),
         label="tab:galaxies",
         source_order=source_order,
         metric_name=r"$R^2$",

@@ -2,14 +2,14 @@
 \centering
 \scriptsize
 \setlength{\tabcolsep}{4pt}
-\caption{COSMOS-Web HSC$\times$JWST linear probe $R^2$ on 45\,000 galaxies (PCA-1024, $z$-scored; 5 repeated random train--test splits).}
+\caption{COSMOS-Web HSC$\times$JWST linear-probe $R^2$ on 45\,000 galaxies. Gestalt retains each view's native width during per-view PCA and $z$-scoring before MCCA; single-model controls use PCA-to-at-most-1024 and $z$-scoring (5 repeated random train--test splits).}
 \label{tab:cosmosweb}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccc}
 \toprule
  & $z$ (HSC) & $\log M_\star$ (HSC) & sSFR (HSC) & $z$ (JWST) & $\log M_\star$ (JWST) & sSFR (JWST) \\
 \midrule
-\textbf{Basket (MCCA)} & $\mathbf{0.518 \pm 0.008}$ & $\mathbf{0.604 \pm 0.012}$ & $\mathbf{0.581 \pm 0.015}$ & $\mathbf{0.658 \pm 0.014}$ & $\mathbf{0.848 \pm 0.003}$ & $\mathbf{0.482 \pm 0.007}$ \\
+\textbf{Gestalt} & $\mathbf{0.518 \pm 0.008}$ & $\mathbf{0.604 \pm 0.012}$ & $\mathbf{0.581 \pm 0.015}$ & $\mathbf{0.658 \pm 0.014}$ & $\mathbf{0.848 \pm 0.003}$ & $\mathbf{0.482 \pm 0.007}$ \\
 \textbf{Basket (concat$\to$PCA)} & $0.482 \pm 0.008$ & $0.577 \pm 0.009$ & $0.555 \pm 0.007$ & $0.595 \pm 0.013$ & $0.815 \pm 0.004$ & $0.458 \pm 0.004$ \\
 \midrule
 AstroPT 15M & $0.387 \pm 0.014$ & $0.526 \pm 0.010$ & $0.462 \pm 0.003$ & $0.349 \pm 0.012$ & $0.674 \pm 0.011$ & $0.293 \pm 0.009$ \\

@@ -41,7 +41,7 @@ TARGET_LABEL = {
 
 SOURCE_STYLE = {
     "basket_mcca_whitened": {
-        "label": "Basket (MCCA, whitened)",
+        "label": "Gestalt",
         "color": "#ff7f0e", "marker": "o", "offset": -0.20,
     },
     "basket_concat_pca": {

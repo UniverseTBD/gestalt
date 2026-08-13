@@ -2,13 +2,13 @@
 \centering
 \scriptsize
 \setlength{\tabcolsep}{4pt}
-\caption{Galaxy Zoo 10 (UniverseTBD/mmu\_gz10) linear-probe scores: macro $F_1$ for the 10-way morphology classification and $R^2$ for photometric redshift (PCA-1024, $z$-scored; 5 probe seeds).}
+\caption{Galaxy Zoo 10 (UniverseTBD/mmu\_gz10) linear-probe scores: macro $F_1$ for 10-way morphology and $R^2$ for photometric redshift. Gestalt retains each view's native width during per-view PCA and $z$-scoring before MCCA; single-model controls use PCA-to-at-most-1024 and $z$-scoring (5 probe seeds).}
 \label{tab:gz10}
 \begin{tabular}{lcc}
 \toprule
  & GZ10 class & $z_{\rm phot}$ \\
 \midrule
-\textbf{Basket (MCCA)} & $\mathbf{0.708 \pm 0.009}$ & $\mathbf{0.758 \pm 0.008}$ \\
+\textbf{Gestalt} & $\mathbf{0.708 \pm 0.009}$ & $\mathbf{0.758 \pm 0.008}$ \\
 \textbf{Basket (concat$\to$PCA)} & $0.674 \pm 0.009$ & $0.729 \pm 0.010$ \\
 \midrule
 AstroPT 15M & $0.424 \pm 0.006$ & $0.514 \pm 0.009$ \\

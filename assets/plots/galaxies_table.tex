@@ -2,14 +2,14 @@
 \centering
 \scriptsize
 \setlength{\tabcolsep}{4pt}
-\caption{Smith42/galaxies (v2.0) linear-probe $R^2$ on 13 paper-faithful regression targets (PCA-1024, $z$-scored; 5 probe seeds).}
+\caption{Smith42/galaxies (v2.0) linear-probe $R^2$ on 13 paper-faithful regression targets. Gestalt retains each view's native width during per-view PCA and $z$-scoring before MCCA; single-model controls use PCA-to-at-most-1024 and $z$-scoring (5 probe seeds).}
 \label{tab:galaxies}
 \resizebox{\textheight}{!}{%
 \begin{tabular}{lccccccccccccc}
 \toprule
  & $M_g$ & $M_z$ & $g{-}r$ & $r{-}z$ & $z_{\rm phot}$ & $z_{\rm spec}$ & $\log M_\star$ & sSFR & smooth & disc & artifact & edge-on & tight spiral \\
 \midrule
-\textbf{Basket (MCCA)} & $\mathbf{0.650 \pm 0.012}$ & $\mathbf{0.731 \pm 0.010}$ & $\mathbf{0.863 \pm 0.007}$ & $\mathbf{0.758 \pm 0.009}$ & $\mathbf{0.779 \pm 0.005}$ & $\mathbf{0.883 \pm 0.005}$ & $\mathbf{0.669 \pm 0.012}$ & $0.367 \pm 0.032$ & $\mathbf{0.825 \pm 0.003}$ & $\mathbf{0.818 \pm 0.005}$ & $\mathbf{0.854 \pm 0.015}$ & $\mathbf{0.875 \pm 0.004}$ & $\mathbf{0.719 \pm 0.012}$ \\
+\textbf{Gestalt} & $\mathbf{0.650 \pm 0.012}$ & $\mathbf{0.731 \pm 0.010}$ & $\mathbf{0.863 \pm 0.007}$ & $\mathbf{0.758 \pm 0.009}$ & $\mathbf{0.779 \pm 0.005}$ & $\mathbf{0.883 \pm 0.005}$ & $\mathbf{0.669 \pm 0.012}$ & $0.367 \pm 0.032$ & $\mathbf{0.825 \pm 0.003}$ & $\mathbf{0.818 \pm 0.005}$ & $\mathbf{0.854 \pm 0.015}$ & $\mathbf{0.875 \pm 0.004}$ & $\mathbf{0.719 \pm 0.012}$ \\
 \textbf{Basket (concat$\to$PCA)} & $0.613 \pm 0.010$ & $0.696 \pm 0.008$ & $0.833 \pm 0.010$ & $0.727 \pm 0.010$ & $0.747 \pm 0.008$ & $0.862 \pm 0.005$ & $0.645 \pm 0.008$ & $0.306 \pm 0.021$ & $0.790 \pm 0.008$ & $0.779 \pm 0.008$ & $0.822 \pm 0.018$ & $0.852 \pm 0.003$ & $0.662 \pm 0.031$ \\
 \midrule
 AstroPT 15M & $0.461 \pm 0.013$ & $0.555 \pm 0.010$ & $0.716 \pm 0.008$ & $0.599 \pm 0.008$ & $0.603 \pm 0.006$ & $0.760 \pm 0.004$ & $0.528 \pm 0.007$ & $0.247 \pm 0.030$ & $0.492 \pm 0.017$ & $0.423 \pm 0.014$ & $0.651 \pm 0.023$ & $0.464 \pm 0.005$ & $0.406 \pm 0.016$ \\

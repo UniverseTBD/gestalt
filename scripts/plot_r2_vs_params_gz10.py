@@ -71,7 +71,7 @@ FAMILY_STYLE = {
 
 BASKET_STYLE = {
     "basket_mcca_whitened": {
-        "label": "Basket (MCCA, whitened)",
+        "label": "Gestalt",
         "color": "#000000", "ls": "-",
     },
     "basket_concat_pca": {

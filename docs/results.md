@@ -85,11 +85,6 @@ COSMOS-Web. Ordering, consistent across all six cells:
   everywhere. Whatever the basket does well, it does *because* of
   alignment, not because of averaging.
 
-## Whitening ablation (D = 1024, `data/results_pca1024_zscore_ablation.parquet`)
-
-`pca_zscore` beats plain `zscore` whitening by +0.019 to +0.043 R²
-per cell; `pca_zscore` is the default everywhere.
-
 ## Reproducibility
 
 ```bash
