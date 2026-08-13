@@ -35,8 +35,9 @@ UniverseTBD/mmu_gz10, 5 seeds. MCCA wins both tasks.
 ## Out-of-domain: Smith42/galaxies (`data/results_pca1024_galaxies.parquet`)
 
 13 paper-faithful regression targets, 5 seeds. **MCCA wins 12/13**
-(median R² 0.779 vs 0.747 concat→PCA vs 0.713 best single). The one
-loss: `mean_ssfr`, where clip_large alone (0.397±0.019) beats MCCA
+(median R² 0.779±0.005 vs 0.747±0.008 concat→PCA vs 0.709±0.003 for the
+best fixed single model, ijepa_huge). The one loss: `mean_ssfr`, where
+clip_large alone (0.397±0.019) beats MCCA
 (0.367±0.032) and concat→PCA (0.306±0.021).
 
 ## Scaling with basket size (`data/scaling.parquet`)
