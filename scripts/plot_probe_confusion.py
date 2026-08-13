@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Plot member-model probe-cosine violins, Gestalt values, and label relations.
+"""Plot member-model probe-cosine violins and Gestalt values.
 
 The figure has side-by-side HSC and JWST panels. Each panel contains one
 violin per property pair, built from the 22 single-model cosine values, with
-the corresponding Gestalt value overlaid. Black diamonds show the shared
-COSMOS-Web Pearson correlations after invalid-value masking and the same
-1st/99th-percentile clipping used by the probes. They are a qualitative
-relation anchor: label correlations and probe-weight cosines are not the
-same quantity.
+the corresponding Gestalt value overlaid.
 
-Reads ``data/probes_1024.parquet`` and ``data/cosmos_labels.npz`` and writes
+Reads ``data/probes_1024.parquet`` and writes
 ``assets/plots/probes_confusion.pdf``. A smoke parquet is supported as a
 fallback and produces a ``_smoke`` suffixed output.
 """
@@ -59,8 +55,6 @@ LABEL_SIZE = 8.5
 LEGEND_SIZE = 7.5
 MEMBER_COLOR = "#1f77b4"
 GESTALT_COLOR = "#ff7f0e"
-CATALOG_COLOR = "#111111"
-MARKER_OFFSET = 0.08
 
 
 def _inward_ticks(ax) -> None:
@@ -82,42 +76,6 @@ def _resolve_parquet() -> tuple[Path, str]:
         )
         return smoke, "_smoke"
     raise FileNotFoundError("neither data/probes_1024.parquet nor data/probes_smoke.parquet exists")
-
-
-def _catalog_correlations(path: Path) -> dict[tuple[str, str], float]:
-    """Return clipped, pairwise Pearson correlations from COSMOS-Web labels."""
-    arrays: dict[str, np.ndarray] = {}
-    with np.load(path) as labels:
-        for prop in ("redshift", "mass", "sSFR"):
-            if prop not in labels:
-                raise ValueError(f"missing {prop!r} in {path}")
-            values = np.asarray(labels[prop], dtype=np.float64).copy()
-            invalid = ~np.isfinite(values)
-            if prop == "redshift":
-                invalid |= values <= -50
-            values[invalid] = np.nan
-            finite = np.isfinite(values)
-            if finite.sum() < 3:
-                raise ValueError(f"fewer than 3 valid {prop} labels in {path}")
-            lo, hi = np.quantile(values[finite], [0.01, 0.99])
-            values[finite] = np.clip(values[finite], lo, hi)
-            arrays[prop] = values
-
-    correlations: dict[tuple[str, str], float] = {}
-    for prop_i, prop_j in PROPERTY_PAIRS:
-        finite = np.isfinite(arrays[prop_i]) & np.isfinite(arrays[prop_j])
-        if finite.sum() < 3:
-            raise ValueError(f"fewer than 3 paired labels for {prop_i}/{prop_j}")
-        try:
-            value = float(np.corrcoef(arrays[prop_i][finite], arrays[prop_j][finite])[0, 1])
-        except (IndexError, ValueError) as exc:
-            raise ValueError(
-                f"could not compute catalog correlation for {prop_i}/{prop_j}"
-            ) from exc
-        if not np.isfinite(value):
-            raise ValueError(f"non-finite catalog correlation for {prop_i}/{prop_j}")
-        correlations[(prop_i, prop_j)] = value
-    return correlations
 
 
 def _member_values(df: pd.DataFrame, modality: str, prop_i: str, prop_j: str) -> np.ndarray:
@@ -148,12 +106,7 @@ def _gestalt_value(df: pd.DataFrame, modality: str, prop_i: str, prop_j: str) ->
     return values[0].item()
 
 
-def _plot_panel(
-    ax,
-    df: pd.DataFrame,
-    modality: str,
-    catalog_correlations: dict[tuple[str, str], float],
-) -> None:
+def _plot_panel(ax, df: pd.DataFrame, modality: str) -> None:
     for position, ((prop_i, prop_j), label) in enumerate(zip(PROPERTY_PAIRS, PAIR_LABELS), start=1):
         members = _member_values(df, modality, prop_i, prop_j)
         violin = ax.violinplot(
@@ -170,32 +123,20 @@ def _plot_panel(
             body.set_linewidth(0.7)
             body.set_alpha(1.0)
 
-        catalog = catalog_correlations[(prop_i, prop_j)]
-        ax.scatter(
-            position - MARKER_OFFSET,
-            catalog,
-            color=CATALOG_COLOR,
-            marker="D",
-            edgecolor="white",
-            linewidth=0.5,
-            s=25,
-            zorder=3,
-        )
-
         gestalt = _gestalt_value(df, modality, prop_i, prop_j)
         ax.scatter(
-            position + MARKER_OFFSET,
+            position,
             gestalt,
             color=GESTALT_COLOR,
             edgecolor="white",
             linewidth=0.5,
             s=24,
-            zorder=4,
+            zorder=3,
         )
         below = (prop_i, prop_j) == ("redshift", "sSFR")
         ax.annotate(
             f"{gestalt:+.2f}",
-            (position + MARKER_OFFSET, gestalt),
+            (position, gestalt),
             xytext=(0, -4 if below else 4),
             textcoords="offset points",
             ha="center",
@@ -220,11 +161,10 @@ def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
     parquet_path, suffix = _resolve_parquet()
     df = pd.read_parquet(parquet_path)
-    catalog_correlations = _catalog_correlations(DATA / "cosmos_labels.npz")
 
     fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN), sharey=True)
     for ax, modality in zip(axes, MODALITIES):
-        _plot_panel(ax, df, modality, catalog_correlations)
+        _plot_panel(ax, df, modality)
     axes[0].set_ylabel("probe cosine", fontsize=LABEL_SIZE)
 
     handles = [
@@ -240,22 +180,11 @@ def main() -> None:
             markersize=5,
             label="Gestalt",
         ),
-        Line2D(
-            [0],
-            [0],
-            marker="D",
-            linestyle="none",
-            markerfacecolor=CATALOG_COLOR,
-            markeredgecolor="white",
-            markeredgewidth=0.5,
-            markersize=5,
-            label="COSMOS-Web labels",
-        ),
     ]
     fig.legend(
         handles=handles,
         loc="lower center",
-        ncol=3,
+        ncol=2,
         fontsize=LEGEND_SIZE,
         frameon=False,
         bbox_to_anchor=(0.5, 0.02),
