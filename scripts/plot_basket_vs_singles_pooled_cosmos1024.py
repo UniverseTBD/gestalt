@@ -24,7 +24,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
 from scipy.stats import wilcoxon
 
 matplotlib.rcParams.update(
@@ -44,6 +44,30 @@ MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
 BASKET_STYLE = {
     "basket_mcca_whitened": {"label": "Gestalt", "color": "#ff7f0e"},
     "basket_concat_pca": {"label": r"Basket (concat$\to$PCA)", "color": "#17becf"},
+}
+MODEL_LABELS = {
+    "astropt_015M": "AstroPT 15M",
+    "astropt_095M": "AstroPT 95M",
+    "astropt_850M": "AstroPT 850M",
+    "clip_base": "CLIP 86M",
+    "clip_large": "CLIP 304M",
+    "convnext_nano": "ConvNeXt-V2 15M",
+    "convnext_tiny": "ConvNeXt-V2 28M",
+    "convnext_base": "ConvNeXt-V2 89M",
+    "convnext_large": "ConvNeXt-V2 198M",
+    "ijepa_huge": "I-JEPA 632M",
+    "ijepa_giant": "I-JEPA 1B",
+    "llava_15_7b": "LLaVA-1.5 7B",
+    "llava_15_13b": "LLaVA-1.5 13B",
+    "vit_base": "ViT 86M",
+    "vit_large": "ViT 304M",
+    "vit_huge": "ViT 632M",
+    "vit-mae_base": "ViT-MAE 86M",
+    "vit-mae_large": "ViT-MAE 304M",
+    "vit-mae_huge": "ViT-MAE 632M",
+    "vjepa_large": "V-JEPA-2 300M",
+    "vjepa_huge": "V-JEPA-2 600M",
+    "vjepa_giant": "V-JEPA-2 1B",
 }
 FIG_WIDTH_IN = 396 / 72
 FIG_HEIGHT_IN = 2.5
@@ -65,7 +89,8 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 
 def _short_name(source: str) -> str:
-    return re.sub(r"_pca\d+$", "", source.removeprefix("single_"))
+    name = re.sub(r"_pca\d+$", "", source.removeprefix("single_"))
+    return MODEL_LABELS[name]
 
 
 def cell_pivot(
@@ -137,7 +162,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
             f"{modality:<6}"
             f"{cols['basket_mcca_whitened']:>20}"
             f"{cols['basket_concat_pca']:>20}"
-            f"{means[best_name]:>14.3f} ({best_name[:8]:<8}) "
+            f"{means[best_name]:>14.3f} ({best_name}) "
             f"{median_single:>13.3f}"
             f"{ranks['basket_mcca_whitened']:>7d}/{n_src}"
             f"{ranks['basket_concat_pca']:>9d}/{n_src}"

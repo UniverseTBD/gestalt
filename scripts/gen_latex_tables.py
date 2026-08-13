@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
 from scipy.optimize import curve_fit
 
 REPO = Path(__file__).resolve().parent.parent
@@ -41,6 +41,31 @@ PROPERTY_LABEL = {
     "tight_spiral": r"tight spiral",
 }
 
+MODEL_LABELS = {
+    "astropt_015M": "AstroPT 15M",
+    "astropt_095M": "AstroPT 95M",
+    "astropt_850M": "AstroPT 850M",
+    "clip_base": "CLIP 86M",
+    "clip_large": "CLIP 304M",
+    "convnext_nano": "ConvNeXt-V2 15M",
+    "convnext_tiny": "ConvNeXt-V2 28M",
+    "convnext_base": "ConvNeXt-V2 89M",
+    "convnext_large": "ConvNeXt-V2 198M",
+    "ijepa_huge": "I-JEPA 632M",
+    "ijepa_giant": "I-JEPA 1B",
+    "llava_15_7b": "LLaVA-1.5 7B",
+    "llava_15_13b": "LLaVA-1.5 13B",
+    "vit_base": "ViT 86M",
+    "vit_large": "ViT 304M",
+    "vit_huge": "ViT 632M",
+    "vit-mae_base": "ViT-MAE 86M",
+    "vit-mae_large": "ViT-MAE 304M",
+    "vit-mae_huge": "ViT-MAE 632M",
+    "vjepa_large": "V-JEPA-2 300M",
+    "vjepa_huge": "V-JEPA-2 600M",
+    "vjepa_giant": "V-JEPA-2 1B",
+}
+
 
 def clean_source(src: str) -> str:
     if src == "basket_mcca_whitened":
@@ -51,7 +76,7 @@ def clean_source(src: str) -> str:
         return r"\textbf{Basket (concat$\to$PCA)}"
     if src.startswith("single_"):
         name = src.removeprefix("single_").rsplit("_pca", 1)[0]
-        return name.replace("_", r"\_")
+        return MODEL_LABELS[name]
     return src.replace("_", r"\_")
 
 
@@ -253,16 +278,14 @@ SCALING_KINDS = ["random", "one_per_family"]
 def _scaling_means(df: pd.DataFrame) -> pd.DataFrame:
     """Per-(modality, property, subset_kind, k) mean/std/n over subsets × seeds.
 
-    The k = 22 `full` rows are folded into both `random` and `one_per_family`,
-    matching the plotting convention.
+    The k = 22 `full` rows extend only the random curve. One-per-family is
+    undefined above k = 8 because the basket has eight families.
     """
     full = df[df["subset_kind"] == "full"].copy()
-    parts = [df[df["subset_kind"].isin(SCALING_KINDS)].copy()]
-    for kind in SCALING_KINDS:
-        f = full.copy()
-        f["subset_kind"] = kind
-        parts.append(f)
-    long = pd.concat(parts, ignore_index=True)
+    full["subset_kind"] = "random"
+    long = pd.concat(
+        [df[df["subset_kind"].isin(SCALING_KINDS)].copy(), full], ignore_index=True
+    )
     return (
         long.groupby(["modality", "property", "subset_kind", "k"])["r2"]
         .agg(["mean", "std", "count"])
@@ -276,11 +299,11 @@ def _scaling_law(k: np.ndarray, R_inf: float, A: float, alpha: float) -> np.ndar
 
 def _fit_scaling_law(ks: np.ndarray, means: np.ndarray) -> tuple[float, float, float, float]:
     p0 = [float(means.max()), max(1e-3, float(means.max() - means.min())), 1.0]
-    popt, _ = curve_fit(
+    popt = curve_fit(
         _scaling_law, ks.astype(float), means,
         p0=p0, bounds=([0.0, 0.0, 0.05], [1.0, 5.0, 5.0]),
         maxfev=20000,
-    )
+    )[0]
     rmse = float(np.sqrt(np.mean((_scaling_law(ks.astype(float), *popt) - means) ** 2)))
     return float(popt[0]), float(popt[1]), float(popt[2]), rmse
 
@@ -300,9 +323,9 @@ def render_scaling_values() -> str:
     lines.append(r"\setlength{\tabcolsep}{4pt}")
     lines.append(r"\caption{COSMOS-Web basket-pruning $R^2$ vs basket size $k$ "
                  r"(MCCA-whitened fusion; mean $\pm$ std across subset draws and "
-                 r"five repeated probe splits). The $k{=}22$ column is the single full-basket "
-                 r"value, folded into both subset policies; one-per-family is "
-                 r"undefined for $k{>}8$ (only 8 model families).}")
+                 r"five repeated probe splits). The full-basket value appears at $k{=}22$ "
+                 r"for the random series; one-per-family is undefined for $k{>}8$ "
+                 r"because the basket contains eight model families.}")
     lines.append(r"\label{tab:scaling-values}")
     header_ks = " & ".join([rf"$k{{=}}{k}$" for k in SCALING_KS])
     lines.append(r"\begin{tabular}{lll" + "c" * len(SCALING_KS) + "}")
@@ -350,7 +373,8 @@ def render_scaling_fits() -> str:
     lines.append(r"\caption{Fitted basket-size scaling law "
                  r"$R^2(k) = R^2_\infty - A\,k^{-\alpha}$ to the per-$k$ mean "
                  r"$R^2$ values in Table~\ref{tab:scaling-values}. RMSE is the "
-                 r"residual on those means (units of $R^2$).}")
+                 r"residual on those means (units of $R^2$); fits require at least "
+                 r"four basket sizes, so one-per-family rows are undefined.}")
     lines.append(r"\label{tab:scaling-fits}")
     lines.append(r"\begin{tabular}{lllcccc}")
     lines.append(r"\toprule")
@@ -370,7 +394,7 @@ def render_scaling_fits() -> str:
                           & (agg["subset_kind"] == kind)].sort_values("k")
                 ks = sub["k"].to_numpy()
                 means = sub["mean"].to_numpy()
-                if len(ks) < 3:
+                if len(ks) < 4:
                     cells = ["--"] * 4
                 else:
                     R_inf, A, alpha, rmse = _fit_scaling_law(ks, means)
@@ -475,7 +499,7 @@ def render_transfer(
     lines.append(rf"\begin{{tabular}}{{{align}}}")
     lines.append(r"\toprule")
     header = (" & ".join(["Source", "Fit on"]
-                         + [PROPERTY_LABEL.get(p, p) for p in properties])
+                         + [PROPERTY_LABEL.get(p) or str(p) for p in properties])
               + r" \\")
     lines.append(header)
     lines.append(r"\midrule")

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
@@ -24,6 +24,30 @@ MODALITIES = ["hsc", "jwst"]
 PROPERTIES = ["redshift", "mass", "sSFR"]
 PROPERTY_LABEL = {"redshift": r"$z$", "mass": r"$\log M_\star$", "sSFR": "sSFR"}
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
+MODEL_LABELS = {
+    "astropt_015M": "AstroPT 15M",
+    "astropt_095M": "AstroPT 95M",
+    "astropt_850M": "AstroPT 850M",
+    "clip_base": "CLIP 86M",
+    "clip_large": "CLIP 304M",
+    "convnext_nano": "ConvNeXt-V2 15M",
+    "convnext_tiny": "ConvNeXt-V2 28M",
+    "convnext_base": "ConvNeXt-V2 89M",
+    "convnext_large": "ConvNeXt-V2 198M",
+    "ijepa_huge": "I-JEPA 632M",
+    "ijepa_giant": "I-JEPA 1B",
+    "llava_15_7b": "LLaVA-1.5 7B",
+    "llava_15_13b": "LLaVA-1.5 13B",
+    "vit_base": "ViT 86M",
+    "vit_large": "ViT 304M",
+    "vit_huge": "ViT 632M",
+    "vit-mae_base": "ViT-MAE 86M",
+    "vit-mae_large": "ViT-MAE 304M",
+    "vit-mae_huge": "ViT-MAE 632M",
+    "vjepa_large": "V-JEPA-2 300M",
+    "vjepa_huge": "V-JEPA-2 600M",
+    "vjepa_giant": "V-JEPA-2 1B",
+}
 
 
 def load_paired() -> pd.DataFrame:
@@ -104,9 +128,7 @@ def main() -> None:
                 pca_cell = fmt_cell(mean=pm, std=ps, better=better_pca)
                 full_cell = fmt_cell(mean=fm, std=fs, better=not better_pca)
                 cells.extend([pca_cell, full_cell])
-            lines.append(
-                f"    \\texttt{{{model.replace('_', '\\_')}}} & " + " & ".join(cells) + " \\\\"
-            )
+            lines.append(f"    {MODEL_LABELS[model]} & " + " & ".join(cells) + " \\\\")
 
     lines += [
         "    \\bottomrule",

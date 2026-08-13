@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
 
 matplotlib.rcParams.update(
     {
@@ -76,14 +76,15 @@ def _scaling_curve(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Mean R² (across (subset_id, seed, property)) at each k for one curve.
 
-    The `subset_kind=full` row at k=22 is folded in so each curve
-    terminates at the all-22 basket value.
+    The full-basket row extends the random curve to k=22. One-per-family
+    stops at k=8 because the basket contains eight families.
     """
+    kinds = [subset_kind, "full"] if subset_kind == "random" else [subset_kind]
     sub = df[
         (df["modality"] == modality)
         & (df["property"].isin(props))
         & (df["source"] == SOURCE)
-        & (df["subset_kind"].isin([subset_kind, "full"]))
+        & (df["subset_kind"].isin(kinds))
     ]
     if sub.empty:
         return np.array([]), np.array([])
@@ -128,7 +129,7 @@ def _plot_panel(
     if ks_all:
         ax.set_xscale("log")
         ax.set_xticks(ks_all)
-        ax.set_xticklabels([str(int(k)) for k in ks_all])
+        ax.set_xticklabels([f"{k:g}" for k in ks_all])
         ax.minorticks_off()
     ax.set_title(title, fontsize=TITLE_SIZE)
     ax.tick_params(labelsize=TICK_SIZE)
