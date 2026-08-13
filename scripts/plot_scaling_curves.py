@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd  # pyright: ignore[reportMissingImports]
+import pandas as pd
 
 matplotlib.rcParams.update(
     {
@@ -73,12 +73,11 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 def _scaling_curve(
     df: pd.DataFrame, modality: str, props: list[str], subset_kind: str
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Mean and standard deviation of R² at each k for one curve.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mean R² (across (subset_id, seed, property)) at each k for one curve.
 
-    Properties are averaged within each subset draw and probe split. The
-    `subset_kind=full` row at k=22 is folded in so each curve terminates at
-    the all-22 basket value, whose spread is across the five splits only.
+    The `subset_kind=full` row at k=22 is folded in so each curve
+    terminates at the all-22 basket value.
     """
     sub = df[
         (df["modality"] == modality)
@@ -87,20 +86,18 @@ def _scaling_curve(
         & (df["subset_kind"].isin([subset_kind, "full"]))
     ]
     if sub.empty:
-        return np.array([]), np.array([]), np.array([])
+        return np.array([]), np.array([])
     ks = sorted(sub["k"].unique())
     means = np.full(len(ks), np.nan, dtype=np.float64)
-    stds = np.full(len(ks), np.nan, dtype=np.float64)
     for i, k in enumerate(ks):
         # average over properties within each (subset_id, seed) first so
-        # the spread reflects between-seed/draw variability, not between-prop.
+        # the mean reflects between-seed/draw variability, not between-prop.
         per_draw = sub[sub["k"] == k].groupby(["subset_id", "seed"])["r2"].mean().to_numpy()
         per_draw = per_draw[np.isfinite(per_draw)]
         if per_draw.size == 0:
             continue
         means[i] = per_draw.mean()
-        stds[i] = per_draw.std(ddof=1)
-    return np.asarray(ks, dtype=float), means, stds
+    return np.asarray(ks, dtype=float), means
 
 
 def _plot_panel(
@@ -112,21 +109,18 @@ def _plot_panel(
 ) -> None:
     color = BASKET_STYLE[SOURCE]["color"]
     for kind in SUBSET_KINDS:
-        ks, means, stds = _scaling_curve(df, modality, props, kind)
+        ks, means = _scaling_curve(df, modality, props, kind)
         if ks.size == 0:
             continue
         style = SUBSET_STYLE[kind]
-        ax.errorbar(
+        ax.plot(
             ks,
             means,
-            yerr=stds,
             color=color,
             marker=style["marker"],
             linestyle=style["linestyle"],
             ms=4,
             lw=1.2,
-            elinewidth=0.8,
-            capsize=2,
             label=f"Gestalt, {style['label']}",
         )
 
@@ -134,7 +128,7 @@ def _plot_panel(
     if ks_all:
         ax.set_xscale("log")
         ax.set_xticks(ks_all)
-        ax.set_xticklabels([f"{k:g}" for k in ks_all])
+        ax.set_xticklabels([str(int(k)) for k in ks_all])
         ax.minorticks_off()
     ax.set_title(title, fontsize=TITLE_SIZE)
     ax.tick_params(labelsize=TICK_SIZE)
