@@ -29,8 +29,8 @@ UniverseTBD/mmu_gz10, 5 seeds. MCCA wins both tasks.
 
 | task                    | **MCCA**        | concat→PCA  | best single (id)     |
 |-------------------------|-----------------|-------------|----------------------|
-| morphology (macro F1)   | **0.708±0.009** | 0.674±0.009 | 0.682 (clip_large)   |
-| redshift (R²)           | **0.758±0.008** | 0.729±0.010 | 0.690 (ijepa_huge)   |
+| morphology (macro F1)   | **0.708±0.009** | 0.674±0.009 | 0.682±0.013 (clip_large) |
+| redshift (R²)           | **0.758±0.008** | 0.729±0.010 | 0.690±0.014 (ijepa_huge) |
 
 ## Out-of-domain: Smith42/galaxies (`data/results_pca1024_galaxies.parquet`)
 
