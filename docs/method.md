@@ -125,16 +125,19 @@ for "best achievable native R²" at full corpus size.
 
 ## Hyperparameters
 
-- `D` (PCA / shared-latent dimensionality): 1024 for all canonical
-  results. Per-model PCA truncates to `min(D, d_m)`, so models narrower
-  than D (e.g. AstroPT-015M at 384-d) keep their native width. Earlier
-  D ∈ {128, 256} sweeps are retained as ablations (`results_pca256.parquet`);
-  the D=256 sweep is also where the alignment-mode comparison lives
+- `D` (shared-latent dimensionality): 1024 for all canonical results.
+  Gestalt retains each view's native width during per-view PCA + z-scoring
+  before MCCA. Single-model controls are probed at their full native
+  embedding width (`results_native_*.parquet`); the legacy controls PCA-capped
+  to `min(D, d_m)` are kept only for the width-sensitivity appendix
+  comparison. Earlier D ∈ {128, 256} sweeps are retained as ablations
+  (`results_pca256.parquet`); the D=256 sweep is also where the
+  alignment-mode comparison lives
   (MCCA > Procrustes/GPA ≫ concat→PCA > best single ≫ naive mean).
 - `n_seeds`: 5 (seeds 0--4). Each seed picks an independent train/test split via
   `sklearn.model_selection.train_test_split(random_state=seed)`; these are repeated
-  holdouts, not disjoint cross-validation folds. Historical result parquets retain
-  seeds 5--9, but paper tables and figures filter to seeds 0--4.
+  holdouts, not disjoint cross-validation folds. All published tables and
+  figures use seeds 0--4.
 - `test_size`: 5 000.
 - `n_use`: 45 000 (the full pre-published embedding length).
 

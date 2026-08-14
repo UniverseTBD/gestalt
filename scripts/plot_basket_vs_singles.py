@@ -10,10 +10,11 @@ p-values (basket vs best single, per-seed pairs).
 
 Resurrected from `bench/plotting.py` (deleted at 415d741, last at 8e9fe4d)
 and restyled to the `scripts/plot_*.py` figure family. Reads
-`data/cosmos_1024.parquet`; writes
+`data/results_native_cosmos.parquet`; writes
 `figs/basket_vs_singles_summary_cosmos1024.pdf` (paper Fig 1) and
 `figs/basket_vs_singles_stats_cosmos1024.txt`.
 """
+
 from __future__ import annotations
 
 import re
@@ -36,15 +37,13 @@ PROPERTIES = ["redshift", "mass", "sSFR"]
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
 PROPERTY_LABEL = {
     "redshift": r"$z_{\rm phot}$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     r"sSFR",
+    "mass": r"$\log M_\star$",
+    "sSFR": r"sSFR",
 }
 
 BASKET_STYLE = {
-    "basket_mcca_whitened": {"label": "Gestalt",
-                             "color": "#ff7f0e"},
-    "basket_concat_pca":    {"label": r"Basket (concat$\to$PCA)",
-                             "color": "#17becf"},
+    "basket_mcca_whitened": {"label": "Gestalt", "color": "#ff7f0e"},
+    "basket_concat_pca": {"label": r"Basket (concat$\to$PCA)", "color": "#17becf"},
 }
 
 
@@ -64,7 +63,7 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 
 def _short_name(source: str) -> str:
-    return re.sub(r"_pca\d+$", "", source.removeprefix("single_"))
+    return re.sub(r"_(?:pca\d+|native)$", "", source.removeprefix("single_"))
 
 
 def cell_pivot(
@@ -86,27 +85,34 @@ def cell_pivot(
 def plot_cell(ax, singles: dict, baskets: dict) -> None:
     names = sorted(singles, key=lambda n: singles[n].mean())
     means = np.array([singles[n].mean() for n in names])
-    ses = np.array([singles[n].std(ddof=1) / np.sqrt(len(singles[n]))
-                    for n in names])
+    ses = np.array([singles[n].std(ddof=1) / np.sqrt(len(singles[n])) for n in names])
 
     x = np.arange(len(names))
-    ax.errorbar(x, means, yerr=ses, fmt="o", color="#1f77b4", ms=3,
-                capsize=1.5, capthick=0.6, elinewidth=0.6,
-                label="single model (PCA)")
+    ax.errorbar(
+        x,
+        means,
+        yerr=ses,
+        fmt="o",
+        color="#1f77b4",
+        ms=3,
+        capsize=1.5,
+        capthick=0.6,
+        elinewidth=0.6,
+        label="single model (native width)",
+    )
 
     for src, arr in baskets.items():
         style = BASKET_STYLE[src]
         bm = arr.mean()
         bse = arr.std(ddof=1) / np.sqrt(len(arr))
-        ax.axhspan(bm - bse, bm + bse, color=style["color"], alpha=0.18,
-                   zorder=0)
+        ax.axhspan(bm - bse, bm + bse, color=style["color"], alpha=0.18, zorder=0)
         ax.axhline(bm, color=style["color"], lw=1.4, label=style["label"])
 
     best = int(np.argmax(means))
-    ax.scatter([best], [means[best]], color="#2ca02c", s=55, marker="*",
-               zorder=5, label="best single")
-    ax.axhline(float(np.median(means)), color="#7f7f7f", lw=0.9, ls="--",
-               label="median single")
+    ax.scatter(
+        [best], [means[best]], color="#2ca02c", s=55, marker="*", zorder=5, label="best single"
+    )
+    ax.axhline(float(np.median(means)), color="#7f7f7f", lw=0.9, ls="--", label="median single")
 
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=80, ha="right", fontsize=4.5)
@@ -139,11 +145,8 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
                     cols[src], ranks[src], ps[src] = "—", -1, float("nan")
                     continue
                 cols[src] = f"{arr.mean():.3f}±{arr.std(ddof=1):.3f}"
-                ranks[src] = sum(1 for v in means.values()
-                                 if v > arr.mean()) + 1
-                _, ps[src] = wilcoxon(arr, best_arr,
-                                      alternative="two-sided",
-                                      zero_method="wilcox")
+                ranks[src] = sum(1 for v in means.values() if v > arr.mean()) + 1
+                _, ps[src] = wilcoxon(arr, best_arr, alternative="two-sided", zero_method="wilcox")
 
             n_src = len(singles) + 1
             lines.append(
@@ -161,7 +164,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
 
 
 def main() -> None:
-    df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = pd.read_parquet(DATA / "results_native_cosmos.parquet")
     df = df[df["seed"] < 5]
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)
@@ -172,13 +175,19 @@ def main() -> None:
             ax = axes[i, j]
             singles, baskets = cell_pivot(df, modality, prop)
             plot_cell(ax, singles, baskets)
-            ax.set_title(f"{MODALITY_LABEL[modality]} — {PROPERTY_LABEL[prop]}",
-                         fontsize=9)
+            ax.set_title(f"{MODALITY_LABEL[modality]} — {PROPERTY_LABEL[prop]}", fontsize=9)
             if j == 0:
                 ax.set_ylabel(r"$R^2$")
     handles, labels = _dedup_legend(axes.ravel())
-    fig.legend(handles, labels, loc="upper center", ncol=len(labels),
-               frameon=False, fontsize=8, bbox_to_anchor=(0.5, 1.02))
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=len(labels),
+        frameon=False,
+        fontsize=8,
+        bbox_to_anchor=(0.5, 1.02),
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     pdf_path = FIGS / "basket_vs_singles_summary_cosmos1024.pdf"

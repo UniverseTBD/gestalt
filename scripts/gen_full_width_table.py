@@ -67,7 +67,9 @@ def load_paired() -> pd.DataFrame:
     paired = pca_df.merge(full_df, on=keys, how="inner").sort_values(keys)
     counts = paired.groupby(keys[:-1]).size()
     if not (counts == N_SEEDS).all():
-        raise ValueError("full-width comparison does not contain exactly five paired seeds per cell")
+        raise ValueError(
+            "full-width comparison does not contain exactly five paired seeds per cell"
+        )
     return paired
 
 
@@ -98,9 +100,9 @@ def main() -> None:
         "  \\caption{Per-model linear-probe $R^2$ (mean $\\pm$ std, five seeds;",
         "    std at 1 significant figure) on the raw full-width embedding",
         "    vs its PCA-to-at-most-1024 projection. Bold marks the higher mean.",
-        "    Models with native width at most 1024 still show tiny diffs",
-        "    ($\\Delta R^2 \\lesssim 10^{-3}$) from randomized-SVD",
-        "    reprojection error.}",
+        "    Models with native width at most 1024 can still differ",
+        "    by up to $0.019$ in $R^2$ through randomized-SVD",
+        "    reprojection numerics.}",
         "  \\label{tab:fullwidth}",
         "  \\centering\\footnotesize",
     ]

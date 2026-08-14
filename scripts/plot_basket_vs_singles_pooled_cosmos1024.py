@@ -9,7 +9,7 @@ are drawn as horizontal bands off the same body of collapsed seed values.
 Companion file lists per-model means, ranks, and paired two-sided Wilcoxon
 p-values on the collapsed seed vectors.
 
-Reads `data/cosmos_1024.parquet`; writes
+Reads `data/results_native_cosmos.parquet`; writes
 `figs/basket_vs_singles_pooled_cosmos1024.pdf` and
 `figs/basket_vs_singles_pooled_cosmos1024.txt`.
 """
@@ -89,7 +89,7 @@ def _dedup_legend(axes) -> tuple[list, list]:
 
 
 def _short_name(source: str) -> str:
-    name = re.sub(r"_pca\d+$", "", source.removeprefix("single_"))
+    name = re.sub(r"_(?:pca\d+|native)$", "", source.removeprefix("single_"))
     return MODEL_LABELS[name]
 
 
@@ -173,7 +173,7 @@ def stats_lines(df: pd.DataFrame) -> list[str]:
 
 
 def main() -> None:
-    df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = pd.read_parquet(DATA / "results_native_cosmos.parquet")
     df = df[df["seed"] < 5]
     df = df[df["kind"] == "regression"] if "kind" in df.columns else df
     FIGS.mkdir(exist_ok=True)

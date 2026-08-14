@@ -8,6 +8,7 @@ Spearman ρ + p annotation. Adds horizontal bands for each basket-fusion
 variant so the single-model scatter can be compared against the basket
 in one frame — that overlay is the bazaar-specific extension.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,51 +29,66 @@ FIGS = REPO / "assets" / "plots"
 # Parameter counts copied verbatim from pu/scripts/plot_r2_vs_params.py.
 PARAM_COUNTS = {
     "vit": {
-        "base": 86_389_248, "large": 304_351_232, "huge": 632_404_480,
+        "base": 86_389_248,
+        "large": 304_351_232,
+        "huge": 632_404_480,
     },
     "vit-mae": {
-        "base": 86_389_248, "large": 304_351_232, "huge": 632_404_480,
+        "base": 86_389_248,
+        "large": 304_351_232,
+        "huge": 632_404_480,
     },
     "clip": {
-        "base": 86_192_640, "large": 303_971_328,
+        "base": 86_192_640,
+        "large": 303_971_328,
     },
     "convnext": {
-        "nano": 15_623_800, "tiny": 28_635_496,
-        "base": 88_717_800, "large": 197_956_840,
+        "nano": 15_623_800,
+        "tiny": 28_635_496,
+        "base": 88_717_800,
+        "large": 197_956_840,
     },
     "ijepa": {
-        "huge": 630_762_240, "giant": 1_011_368_576,
+        "huge": 630_762_240,
+        "giant": 1_011_368_576,
     },
     "vjepa": {
-        "large": 325_971_328, "huge": 653_930_880, "giant": 1_034_555_264,
+        "large": 325_971_328,
+        "huge": 653_930_880,
+        "giant": 1_034_555_264,
     },
     "astropt": {
-        "015M": 15_000_000, "095M": 95_000_000, "850M": 850_000_000,
+        "015M": 15_000_000,
+        "095M": 95_000_000,
+        "850M": 850_000_000,
     },
     "llava_15": {
-        "7b": 7_062_898_688, "13b": 13_015_864_320,
+        "7b": 7_062_898_688,
+        "13b": 13_015_864_320,
     },
 }
 
 FAMILY_STYLE = {
-    "vit":       {"label": "ViT",       "color": "#1f77b4", "marker": "o"},
-    "vit-mae":   {"label": "ViT-MAE",   "color": "#efcc00", "marker": "<"},
-    "clip":      {"label": "CLIP",      "color": "#ff7f0e", "marker": "s"},
-    "convnext":  {"label": "ConvNeXt",  "color": "#2ca02c", "marker": "^"},
-    "ijepa":     {"label": "I-JEPA",    "color": "#9467bd", "marker": "v"},
-    "vjepa":     {"label": "V-JEPA",    "color": "#8c564b", "marker": "P"},
-    "astropt":   {"label": "AstroPT",   "color": "#e377c2", "marker": "*"},
-    "llava_15":  {"label": "LLaVA 1.5", "color": "#7f7f7f", "marker": "X"},
+    "vit": {"label": "ViT", "color": "#1f77b4", "marker": "o"},
+    "vit-mae": {"label": "ViT-MAE", "color": "#efcc00", "marker": "<"},
+    "clip": {"label": "CLIP", "color": "#ff7f0e", "marker": "s"},
+    "convnext": {"label": "ConvNeXt", "color": "#2ca02c", "marker": "^"},
+    "ijepa": {"label": "I-JEPA", "color": "#9467bd", "marker": "v"},
+    "vjepa": {"label": "V-JEPA", "color": "#8c564b", "marker": "P"},
+    "astropt": {"label": "AstroPT", "color": "#e377c2", "marker": "*"},
+    "llava_15": {"label": "LLaVA 1.5", "color": "#7f7f7f", "marker": "X"},
 }
 
 BASKET_STYLE = {
     "basket_mcca_whitened": {
         "label": "Gestalt",
-        "color": "#000000", "ls": "-",
+        "color": "#000000",
+        "ls": "-",
     },
     "basket_concat_pca": {
         "label": r"Basket (concat$\to$PCA)",
-        "color": "#555555", "ls": ":",
+        "color": "#555555",
+        "ls": ":",
     },
 }
 
@@ -81,13 +97,13 @@ PROPERTIES = ["redshift", "mass", "sSFR"]
 MODALITY_LABEL = {"hsc": "HSC", "jwst": "JWST"}
 PROPERTY_LABEL = {
     "redshift": r"$z_{\rm phot}$",
-    "mass":     r"$\log M_\star$",
-    "sSFR":     r"sSFR",
+    "mass": r"$\log M_\star$",
+    "sSFR": r"sSFR",
 }
 
 
 def parse_single(source: str) -> tuple[str, str] | None:
-    """Split `single_<family>_<size>_pca<D>` into (family, size).
+    """Split `single_<family>_<size>_<representation>` into (family, size).
 
     `llava_15` is the only family whose name contains an underscore, so we
     rsplit once on `_` after stripping the prefix/suffix — that puts the
@@ -96,7 +112,7 @@ def parse_single(source: str) -> tuple[str, str] | None:
     if not source.startswith("single_"):
         return None
     core = source.removeprefix("single_")
-    core = re.sub(r"_pca\d+$", "", core)
+    core = re.sub(r"_(?:pca\d+|native)$", "", core)
     family, sep, size = core.rpartition("_")
     if not sep:
         return None
@@ -168,10 +184,14 @@ def _plot_singles_scatter(
             continue
         style = FAMILY_STYLE[family]
         ax.scatter(
-            xs, ys,
-            color=style["color"], marker=style["marker"],
-            s=markersize, label=style["label"],
-            edgecolors="black", linewidths=0.4,
+            xs,
+            ys,
+            color=style["color"],
+            marker=style["marker"],
+            s=markersize,
+            label=style["label"],
+            edgecolors="black",
+            linewidths=0.4,
         )
         xs_all.extend(xs)
         ys_all.extend(ys)
@@ -189,29 +209,35 @@ def _plot_singles_scatter(
     if annotate:
         rho, p_rho = spearmanr(x_arr[finite], y_arr[finite])
         ax.text(
-            0.95, 0.02,
+            0.95,
+            0.02,
             f"ρ = {rho:.3f}  (p = {p_rho:.1g})",
-            transform=ax.transAxes, va="bottom", ha="right", fontsize=9,
+            transform=ax.transAxes,
+            va="bottom",
+            ha="right",
+            fontsize=9,
         )
 
     slope, intercept = _fit_log_linear(x_arr[finite], y_arr[finite])
     if fit_line:
         xlim = ax.get_xlim()
         xfit = np.geomspace(xlim[0], xlim[1], 200)
-        ax.plot(xfit, slope * np.log10(xfit) + intercept,
-                color="gray", lw=1.5, ls="--", zorder=0)
+        ax.plot(xfit, slope * np.log10(xfit) + intercept, color="gray", lw=1.5, ls="--", zorder=0)
         ax.set_xlim(xlim)
 
     return {"slope": slope, "intercept": intercept}
 
 
-def _plot_baskets(ax, baskets: dict[str, tuple[float, float]],
-                  *, with_band: bool = True) -> None:
+def _plot_baskets(ax, baskets: dict[str, tuple[float, float]], *, with_band: bool = True) -> None:
     for src, (m, se) in baskets.items():
         style = BASKET_STYLE.get(src, {"label": src, "color": "k", "ls": "-"})
         ax.axhline(
-            m, color=style["color"], linestyle=style["ls"],
-            linewidth=1.2, alpha=0.75, label=style["label"],
+            m,
+            color=style["color"],
+            linestyle=style["ls"],
+            linewidth=1.2,
+            alpha=0.75,
+            label=style["label"],
         )
         if with_band and se > 0:
             ax.axhspan(m - se, m + se, color=style["color"], alpha=0.08)
@@ -247,10 +273,15 @@ def plot_mean(df: pd.DataFrame) -> None:
 
     handles, labels = _dedup_legend(axes)
     fig.legend(
-        handles, labels,
-        loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
-        columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.52, 1.12), frameon=False,
+        handles,
+        labels,
+        loc="upper center",
+        fontsize=8,
+        ncol=(len(labels) + 1) // 2,
+        columnspacing=0.6,
+        handletextpad=0.2,
+        bbox_to_anchor=(0.52, 1.12),
+        frameon=False,
     )
 
     fig.tight_layout()
@@ -270,8 +301,7 @@ def plot_per_property(df: pd.DataFrame) -> None:
             sub = df[(df["modality"] == modality) & (df["property"] == prop)]
             _plot_singles_scatter(ax, collect_singles(sub), markersize=22)
             _plot_baskets(ax, collect_baskets(sub))
-            ax.set_title(f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}",
-                         fontsize=10)
+            ax.set_title(f"{MODALITY_LABEL[modality]}: {PROPERTY_LABEL[prop]}", fontsize=10)
             if c == 0:
                 ax.set_ylabel(r"$R^2$", fontsize=9)
             if r == 1:
@@ -281,10 +311,15 @@ def plot_per_property(df: pd.DataFrame) -> None:
 
     handles, labels = _dedup_legend(axes.flat)
     fig.legend(
-        handles, labels,
-        loc="upper center", fontsize=8, ncol=(len(labels) + 1) // 2,
-        columnspacing=0.6, handletextpad=0.2,
-        bbox_to_anchor=(0.5, 1.04), frameon=False,
+        handles,
+        labels,
+        loc="upper center",
+        fontsize=8,
+        ncol=(len(labels) + 1) // 2,
+        columnspacing=0.6,
+        handletextpad=0.2,
+        bbox_to_anchor=(0.5, 1.04),
+        frameon=False,
     )
 
     fig.tight_layout()
@@ -297,7 +332,7 @@ def plot_per_property(df: pd.DataFrame) -> None:
 
 def main() -> None:
     FIGS.mkdir(parents=True, exist_ok=True)
-    df = pd.read_parquet(DATA / "cosmos_1024.parquet")
+    df = pd.read_parquet(DATA / "results_native_cosmos.parquet")
     df = df[df["seed"] < 5]
     plot_mean(df)
     plot_per_property(df)

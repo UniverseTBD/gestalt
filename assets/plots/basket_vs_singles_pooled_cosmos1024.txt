@@ -1,3 +1,3 @@
 modality       mcca_whitened          concat_pca               best_single  median_single rank_mcca rank_concat    p_mcca  p_concat
-hsc            0.568±0.006         0.538±0.003         0.516 (V-JEPA-2 1B)         0.480      1/23        1/23    0.0625    0.0625
-jwst           0.663±0.007         0.623±0.007         0.615 (V-JEPA-2 1B)         0.522      1/23        1/23    0.0625    0.0625
+hsc            0.568±0.006         0.538±0.003         0.513 (V-JEPA-2 1B)         0.483      1/23        1/23    0.0625    0.0625
+jwst           0.663±0.007         0.623±0.007         0.611 (V-JEPA-2 1B)         0.523      1/23        1/23    0.0625    0.0625
