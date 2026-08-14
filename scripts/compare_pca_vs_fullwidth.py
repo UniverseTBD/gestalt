@@ -2,7 +2,7 @@
 """Per-model PCA-1024 vs raw full-width on COSMOS-Web linear-probe R².
 
 PCA-1024 numbers come straight out of `data/cosmos_1024.parquet` (the
-existing D=1024 sweep — single_<id>_pca1024 rows, 10 seeds × 6 cells).
+existing D=1024 sweep — single_<id>_pca1024 rows, five seeds × 6 cells).
 Raw full-width numbers are computed here from cached per-model .npy
 embeddings using the *same* probe protocol (`bazaar.bench.linear_probe.run_probe`:
 train/test split per seed, 1st/99th target clipping, StandardScaler,
@@ -16,7 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
+from scipy.stats import ttest_1samp  # pyright: ignore[reportMissingImports]
 
 from bazaar.basket import BASKET, emb_npy_path
 from bazaar.bench.linear_probe import run_probe
@@ -29,14 +30,14 @@ OUT_TXT = DATA / "full_width_vs_pca_summary.txt"
 D = 1024
 N_USE = 45_000
 TEST_SIZE = 5_000
-N_SEEDS = 10
+N_SEEDS = 5
 MODALITIES = ["hsc", "jwst"]
 PROPERTIES = ["redshift", "mass", "sSFR"]
 PROPERTY_LABEL = {"redshift": "z", "mass": "logM", "sSFR": "sSFR"}
 
 
 def _full_width_probe(modality: str, model_id: str) -> dict[tuple[str, int], float]:
-    """10-seed raw full-width probe R² for one (modality, model).
+    """Five-seed raw full-width probe R² for one (modality, model).
 
     Returns {(property, seed): r2}.
     """
@@ -60,7 +61,7 @@ def _full_width_probe(modality: str, model_id: str) -> dict[tuple[str, int], flo
 def _pca1024_summary() -> pd.DataFrame:
     """Mean ± std per (modality, model, property) for the PCA-1024 singles."""
     df = pd.read_parquet(DATA / "cosmos_1024.parquet")
-    s = df[df.source.str.startswith("single_")].copy()
+    s = df[(df.seed < N_SEEDS) & df.source.str.startswith("single_")].copy()
     s["model"] = s.source.str.removeprefix("single_").str.removesuffix("_pca1024")
     out = s.groupby(["modality", "model", "property"])["r2"].agg(["mean", "std"]).reset_index()
     return out.rename(columns={"mean": "pca_mean", "std": "pca_std"})
@@ -71,6 +72,12 @@ def _full_width_summary(raw_rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(raw_rows)
     out = df.groupby(["modality", "model", "property"])["r2"].agg(["mean", "std"]).reset_index()
     return out.rename(columns={"mean": "full_mean", "std": "full_std"})
+
+
+def _tost_pvalue(deltas: pd.Series, margin: float = 0.01):
+    lower = ttest_1samp(deltas, -margin, alternative="greater")[1]
+    upper = ttest_1samp(deltas, margin, alternative="less")[1]
+    return max(lower, upper)
 
 
 def main() -> None:
@@ -108,6 +115,7 @@ def main() -> None:
         full_df.to_parquet(cache, index=False)
         print(f"Wrote per-seed cache {cache}")
 
+    full_df = full_df[full_df.seed < N_SEEDS].copy()
     pca = _pca1024_summary()
     full = _full_width_summary(full_df.to_dict(orient="records"))
 
@@ -121,7 +129,7 @@ def main() -> None:
     pd.set_option("display.max_rows", 200)
 
     print()
-    print("=== Per-model, per-cell summary (R², mean over 10 seeds) ===")
+    print(f"=== Per-model, per-cell summary (R², mean over {N_SEEDS} seeds) ===")
     print(joined.to_string(index=False))
 
     print()
@@ -134,12 +142,24 @@ def main() -> None:
     print(f"  Max PCA gain   : {joined.delta.max():+.4f}")
     print(f"  Max full gain  : {joined.delta.min():+.4f}")
 
+    wide_models = {
+        f"{family}_{size}"
+        for family, size in BASKET
+        if np.load(emb_npy_path(EMB_DIR, "hsc", family, size), mmap_mode="r").shape[1] > D
+    }
+    all_tost = _tost_pvalue(joined.delta)
+    wide_tost = _tost_pvalue(joined[joined.model.isin(wide_models)].delta)
+    print(f"  TOST p (all 132 cell means): {all_tost:.3g}")
+    print(f"  TOST p (60 native-width >1024 cell means): {wide_tost:.3g}")
+
     OUT_TXT.write_text(
         joined.to_string(index=False) + "\n\nSummary: "
         f"mean={joined.delta.mean():+.4f}, "
         f"median={joined.delta.median():+.4f}, "
         f"pca_wins={(joined.delta > 0).sum()}, "
-        f"full_wins={(joined.delta < 0).sum()}\n"
+        f"full_wins={(joined.delta < 0).sum()}, "
+        f"tost_all={all_tost:.3g}, "
+        f"tost_wide={wide_tost:.3g}\n"
     )
     print(f"\nWrote {OUT_TXT}")
 

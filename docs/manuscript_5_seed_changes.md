@@ -1,6 +1,6 @@
 # Manuscript changes for the five-split COSMOS-Web results
 
-The paper source is not stored in this repository, so apply the following edits in the manuscript. The tracked result parquets still contain the original ten seeds for provenance; the updated canonical COSMOS-Web and scaling artifacts use seeds 0--4 only. The separate full-width PCA control remains a historical ten-seed analysis.
+The paper source is not stored in this repository, so apply the following edits in the manuscript. All published COSMOS-Web summaries, including the full-width control, use seeds 0--4.
 
 ## 1. Linear-probe protocol — required
 
