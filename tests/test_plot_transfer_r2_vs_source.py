@@ -44,6 +44,7 @@ def test_heatmap_includes_gz10_classification(tmp_path):
         "Single-source Gestalt transfer",
         "Cross-survey Gestalt fit",
         "Best-performing model per survey",
+        "In-domain Gestalt fit",
     )
     frame = pd.DataFrame(rows)
     assert _MODULE._cross_survey_summary_vector(frame).shape == (4,)

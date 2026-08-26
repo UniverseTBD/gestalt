@@ -259,6 +259,7 @@ COMPARISON_LABELS = (
     "Single-source Gestalt transfer",
     "Cross-survey Gestalt fit",
     "Best-performing model per survey",
+    "In-domain Gestalt fit",
 )
 
 HEATMAP_ROWS = [
@@ -341,6 +342,29 @@ def _lodo_7k5_summary_vector() -> np.ndarray:
     return _lodo_summary_matrix()[:, LODO_STRATEGIES.index("LOSO MCCA-7.5k (2.5k×3)")]
 
 
+def _in_domain_gestalt_summary_vector() -> np.ndarray:
+    """Return in-domain Gestalt means from the main per-corpus tables."""
+    cosmos = pd.read_parquet(DATA / "results_native_cosmos.parquet")
+    cosmos = cosmos[cosmos["D"] == 1024]
+    means = []
+    for modality, target in (("hsc", "cosmos-hsc"), ("jwst", "cosmos-jwst")):
+        panel = cast(
+            pd.DataFrame,
+            cosmos[(cosmos["modality"] == modality) & (cosmos["source"] == "basket_mcca_whitened")],
+        )
+        means.append(_source_task_mean(panel, "basket_mcca_whitened", "r2"))
+
+    gz10 = pd.read_parquet(DATA / "results_native_gz10.parquet")
+    gz10 = cast(pd.DataFrame, gz10[gz10["D"] == 1024].copy())
+    gz10["score"] = np.where(gz10["kind"] == "classification", gz10["f1"], gz10["r2"])
+    means.append(_source_task_mean(gz10, "basket_mcca_whitened", "score"))
+
+    galaxies = pd.read_parquet(DATA / "results_native_galaxies.parquet")
+    galaxies = cast(pd.DataFrame, galaxies[galaxies["D"] == 1024])
+    means.append(_source_task_mean(galaxies, "basket_mcca_whitened", "r2"))
+    return np.asarray(means)
+
+
 def _native_single_summary_vector() -> np.ndarray:
     """Return fixed best-single means using equal task weighting."""
     cosmos = pd.read_parquet(DATA / "results_native_cosmos.parquet")
@@ -368,6 +392,7 @@ def _comparison_matrix(df: pd.DataFrame) -> np.ndarray:
             _cross_survey_summary_vector(df),
             _lodo_7k5_summary_vector(),
             _native_single_summary_vector(),
+            _in_domain_gestalt_summary_vector(),
         ),
     )
 
@@ -429,9 +454,9 @@ def plot_comparison_strip(df: pd.DataFrame) -> None:
     comparison = _comparison_matrix(df)
     fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, 1.8), constrained_layout=True)
     x = np.arange(len(LODO_ROWS), dtype=float)
-    colors = ("#ff7f0e", "#17becf", "#2ca02c")
-    markers = ("o", "s", "*")
-    offsets = (-0.18, 0.0, 0.18)
+    colors = ("#ff7f0e", "#17becf", "#2ca02c", "#9467bd")
+    markers = ("o", "s", "*", "D")
+    offsets = (-0.27, -0.09, 0.09, 0.27)
     for col, (label, color, marker, offset) in enumerate(
         zip(COMPARISON_LABELS, colors, markers, offsets),
     ):
@@ -461,8 +486,8 @@ def plot_comparison_strip(df: pd.DataFrame) -> None:
     ax.tick_params(labelsize=7)
     ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.23),
-        ncol=3,
+        bbox_to_anchor=(0.5, -0.28),
+        ncol=2,
         fontsize=6.5,
         frameon=False,
         columnspacing=0.5,
