@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2794,7 +2794,6 @@ dependencies = [
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "polars" },
-    { name = "pyarrow" },
     { name = "safetensors" },
     { name = "scikit-image" },
     { name = "scikit-learn" },
@@ -2821,7 +2820,6 @@ requires-dist = [
     { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pillow", specifier = ">=11.0" },
     { name = "polars", specifier = ">=0.20" },
-    { name = "pyarrow", specifier = ">=14.0" },
     { name = "safetensors", specifier = ">=0.4" },
     { name = "scikit-image", specifier = ">=0.25.2" },
     { name = "scikit-learn", specifier = ">=1.3" },

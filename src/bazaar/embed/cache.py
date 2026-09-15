@@ -13,9 +13,10 @@ The cache directory layout is:
 `bazaar._ingest.iter_galaxies`. Two runs against the same input + basket +
 caps reuse the cache; changing any one invalidates it.
 
-`manifest.json` records what the cache was built from so we can warn on
-divergence (different n_rows than expected, mismatched basket order, etc.).
+`manifest.json` records what the cache was built from (input, split,
+modality, basket, n_rows) as on-disk provenance.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,24 +38,25 @@ def manifest_path(root: Path) -> Path:
     return root / "manifest.json"
 
 
-def write_manifest(root: Path, *, input: str, split: str, modality: str,
-                   max_samples: int | None, basket: list[tuple[str, str]],
-                   n_rows: int, basket_sig: str) -> None:
+def write_manifest(
+    root: Path,
+    *,
+    input: str,
+    split: str,
+    modality: str,
+    max_samples: int | None,
+    basket: list[tuple[str, str]],
+    n_rows: int,
+    basket_sig: str,
+) -> None:
     root.mkdir(parents=True, exist_ok=True)
     payload = {
         "input": input,
         "split": split,
         "modality": modality,
         "max_samples": max_samples,
-        "n_rows": int(n_rows),
+        "n_rows": n_rows,
         "basket": [list(t) for t in basket],
         "basket_signature": basket_sig,
     }
     manifest_path(root).write_text(json.dumps(payload, indent=2))
-
-
-def read_manifest(root: Path) -> dict | None:
-    p = manifest_path(root)
-    if not p.exists():
-        return None
-    return json.loads(p.read_text())

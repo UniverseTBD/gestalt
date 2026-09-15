@@ -26,8 +26,3 @@ def get_adapter(alias: str) -> Type:
             f"Model adapter for alias '{alias}' not found. "
             f"Available adapters: {sorted(list(_REGISTRY.keys()))}"
         ) from exc
-
-
-def list_adapters() -> list:
-    """Return a sorted list of registered adapter aliases."""
-    return sorted(list(_REGISTRY.keys()))

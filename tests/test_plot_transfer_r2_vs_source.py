@@ -33,6 +33,18 @@ def test_heatmap_includes_gz10_classification(tmp_path):
                         }
                     )
 
+    # The real Figure 4 summary CSV lives outside this repo (external LOSO
+    # experiment) and is not always on disk; test the parsing logic against a
+    # synthetic table with the same schema instead.
+    summary = pd.DataFrame(
+        {
+            "strategy": list(_MODULE.LODO_STRATEGIES),
+            **{f"{fs}_mean": [0.5, 0.6] for fs in _MODULE.FIT_SOURCES},
+        }
+    )
+    setattr(_MODULE, "SUMMARY", tmp_path / "table1_main_comparison.csv")
+    summary.to_csv(_MODULE.SUMMARY, index=False)
+
     assert len(_MODULE.HEATMAP_ROWS) == 4
     assert all("redshift" not in row[3] for row in _MODULE.HEATMAP_ROWS)
     assert _MODULE.HEATMAP_SOURCES == (

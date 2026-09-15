@@ -4,6 +4,7 @@ Network-free: we exercise the pass-through preprocessor with a synthetic
 PIL/numpy image, the classification probe with random embeddings + labels,
 and the long-form row shape from a tiny synthetic basket.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -16,10 +17,8 @@ from bazaar.embed.preprocess import flux_to_pil
 
 
 def test_flux_to_pil_rendered_short_circuit_resizes():
-    arr = (np.linspace(0, 255, 256 * 256 * 3)
-           .reshape(256, 256, 3)
-           .astype(np.uint8))
-    out = flux_to_pil({"rendered": arr}, "legacysurvey", ["legacysurvey"])
+    arr = np.linspace(0, 255, 256 * 256 * 3).reshape(256, 256, 3).astype(np.uint8)
+    out = flux_to_pil({"rendered": arr}, "legacysurvey")
     assert out.shape == (96, 96, 3)
     assert out.dtype == np.uint8
     row_means = out.mean(axis=(1, 2))
@@ -28,13 +27,13 @@ def test_flux_to_pil_rendered_short_circuit_resizes():
 
 def test_flux_to_pil_rendered_no_resize():
     arr = np.zeros((128, 64, 3), dtype=np.uint8)
-    out = flux_to_pil({"rendered": arr}, "legacysurvey", ["legacysurvey"], resize=False)
+    out = flux_to_pil({"rendered": arr}, "legacysurvey", resize=False)
     assert out.shape == (128, 64, 3)
 
 
 def test_flux_to_pil_rendered_2d_broadcast():
     arr = np.full((128, 128), 50, dtype=np.uint8)
-    out = flux_to_pil({"rendered": arr}, "legacysurvey", ["legacysurvey"])
+    out = flux_to_pil({"rendered": arr}, "legacysurvey")
     assert out.shape == (96, 96, 3)
     assert (out == 50).all()
 
@@ -42,7 +41,7 @@ def test_flux_to_pil_rendered_2d_broadcast():
 def test_flux_to_pil_rendered_rejects_bad_shape():
     arr = np.zeros((10, 10, 4), dtype=np.uint8)
     with pytest.raises(ValueError, match=r"\(H, W\)"):
-        flux_to_pil({"rendered": arr}, "legacysurvey", ["legacysurvey"])
+        flux_to_pil({"rendered": arr}, "legacysurvey")
 
 
 def test_gz10_source_metadata():

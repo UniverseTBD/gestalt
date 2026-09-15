@@ -9,6 +9,7 @@ per-(family, size) `.npy` cache in `bazaar.embed.cache`.
 basket in order, loads each foundation model exactly once, and writes one
 `.npy` per (family, size) inside `<cache_dir>/<source.fingerprint>/`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,17 +26,15 @@ from bazaar.embed.cache import (
     DEFAULT_CACHE_DIR,
     cache_root,
     npy_path,
-    read_manifest,
     write_manifest,
 )
-from bazaar.embed.models import ModelAdapter, get_adapter, list_adapters
+from bazaar.embed.models import ModelAdapter, get_adapter
 
 __all__ = [
     "DEFAULT_CACHE_DIR",
     "ModelAdapter",
     "embed_basket",
     "get_adapter",
-    "list_adapters",
 ]
 
 
@@ -55,8 +54,10 @@ def _materialise(source: CatalogSource, mode_key: str) -> list[dict]:
 
 def _to_iterable_dataset(rows: list[dict]) -> IterableDataset:
     """Wrap an in-memory row list as a streaming HF dataset that `.map` can hit."""
+
     def gen():
         yield from rows
+
     return IterableDataset.from_generator(gen)
 
 
@@ -78,9 +79,7 @@ def embed_basket(
     embedded and saved.
     """
     if device != "cuda":
-        raise NotImplementedError(
-            "Only CUDA inference is supported today (vendored from pu)."
-        )
+        raise NotImplementedError("Only CUDA inference is supported today (vendored from pu).")
 
     root = cache_root(cache_dir, source.fingerprint)
     root.mkdir(parents=True, exist_ok=True)
@@ -89,16 +88,16 @@ def embed_basket(
     missing = _missing_cache_entries(root, basket)
     if not missing and not force:
         print(f"[bazaar.embed] All {len(basket)} models cached at {root}")
-        rows_cached_count = read_manifest(root)
-        n_rows = rows_cached_count["n_rows"] if rows_cached_count else -1
     else:
         if force:
             missing = list(basket)
         rows = _materialise(source, f"{source.modality}_image")
         n_rows = len(rows)
-        print(f"[bazaar.embed] {n_rows} rows from {source.input!r} "
-              f"(modality={source.modality}); {len(missing)}/{len(basket)} "
-              f"models to embed → {root}")
+        print(
+            f"[bazaar.embed] {n_rows} rows from {source.input!r} "
+            f"(modality={source.modality}); {len(missing)}/{len(basket)} "
+            f"models to embed → {root}"
+        )
 
         # Per-family work-share: pu's adapters lazy-load weights inside `load()`,
         # so we instantiate one adapter at a time and run all rows through it.
@@ -110,21 +109,28 @@ def embed_basket(
             if enable_amp:
                 adapter.enable_amp(True)
             processor = adapter.get_preprocessor(
-                [source.modality], resize=True, resize_mode="match",
+                [source.modality],
+                resize=True,
+                resize_mode="match",
             )
 
-            ds = _to_iterable_dataset(rows).map(processor).remove_columns(
-                [f"{source.modality}_image"]
+            ds = (
+                _to_iterable_dataset(rows)
+                .map(processor)
+                .remove_columns([f"{source.modality}_image"])
             )
             if hasattr(ds, "with_format"):
                 ds = ds.with_format("torch")
-            dl = DataLoader(ds, batch_size=batch_size, num_workers=num_workers)
+            dl = DataLoader(ds, batch_size=batch_size, num_workers=num_workers)  # pyright: ignore[reportArgumentType]  # datasets.IterableDataset is accepted at runtime
 
             n_batches = (n_rows + batch_size - 1) // batch_size
             zs: list[torch.Tensor] = []
             with torch.no_grad():
                 for batch in tqdm(
-                    dl, total=n_batches, desc=f"embed {family}_{size}", unit="batch",
+                    dl,
+                    total=n_batches,
+                    desc=f"embed {family}_{size}",
+                    unit="batch",
                 ):
                     zs.append(adapter.embed_for_mode(batch, source.modality).cpu())
             Z = torch.cat(zs).numpy().astype(np.float32)
@@ -139,8 +145,12 @@ def embed_basket(
 
         write_manifest(
             root,
-            input=source.input, split=source.split, modality=source.modality,
-            max_samples=source.max_samples, basket=basket, n_rows=n_rows,
+            input=source.input,
+            split=source.split,
+            modality=source.modality,
+            max_samples=source.max_samples,
+            basket=basket,
+            n_rows=n_rows,
             basket_sig=sig,
         )
 

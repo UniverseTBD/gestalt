@@ -15,10 +15,11 @@ resize → per-band arcsinh/linear stretch with global percentiles → BGR-flip 
 uint8). ``RGB`` is a pure pass-through for plain 3-band JPG/PNG imagery.
 
 Add your own by constructing a ``Modality`` (typically ``AstroFluxModality``)
-and passing it to ``register()``; new astronomy surveys also need an entry in
+and adding it to ``MODALITIES``; new astronomy surveys also need an entry in
 ``embed/data/percentiles.json`` keyed by ``name`` if they use the global
 ``arcsinh``/``linear`` stretches.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,13 +40,12 @@ import numpy as np
 # Percentile loader (shared global p1/p99 per (modality, band))
 # ---------------------------------------------------------------------------
 
-def _percentiles_path() -> os.PathLike:
-    override = os.environ.get("PU_PERCENTILES_PATH") or os.environ.get(
-        "BAZAAR_PERCENTILES_PATH"
-    )
+
+def _percentiles_path() -> str:
+    override = os.environ.get("PU_PERCENTILES_PATH") or os.environ.get("BAZAAR_PERCENTILES_PATH")
     if override:
         return override
-    return files("bazaar.embed").joinpath("data/percentiles.json")
+    return str(files("bazaar.embed").joinpath("data/percentiles.json"))
 
 
 @lru_cache(maxsize=1)
@@ -63,6 +63,7 @@ def _norm_consts(mode: str, band_names: tuple[str, ...]) -> dict[str, tuple[floa
 # Normalization primitives
 # ---------------------------------------------------------------------------
 
+
 def _arcsinh(chan: np.ndarray, p1: float, p99: float, alpha: float = 20.0) -> np.ndarray:
     t = (chan - p1) / (p99 - p1)
     return (np.arcsinh(alpha * t) / np.arcsinh(alpha)).clip(0, 1)
@@ -79,6 +80,7 @@ def _per_image(chan: np.ndarray, alpha: float = 20.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Modality protocol + concrete implementations
 # ---------------------------------------------------------------------------
+
 
 class Modality(Protocol):
     name: str
@@ -149,9 +151,11 @@ class AstroFluxModality:
 
         if self.do_resize and resize:
             if resize_mode == "match" and self.resize_extent is not None:
-                arr = resize_galaxy_to_fit(arr, force_extent=self.resize_extent, target_size=96)
+                arr = np.asarray(
+                    resize_galaxy_to_fit(arr, force_extent=self.resize_extent, target_size=96)
+                )
             else:
-                arr = resize_galaxy_to_fit(arr, target_size=96)
+                arr = np.asarray(resize_galaxy_to_fit(arr, target_size=96))
 
         if norm_mode in ("arcsinh", "linear"):
             consts = _norm_consts(self.name, self.norm_bands)
@@ -228,9 +232,7 @@ HSC = AstroFluxModality(
     resize_extent=(68, 92, 68, 92),
     do_resize=True,
     band_predicate=lambda s: (
-        any("hsc" in b for b in s)
-        or s == {"g", "r", "i", "z"}
-        or s == {"g", "r", "i", "z", "y"}
+        any("hsc" in b for b in s) or s == {"g", "r", "i", "z"} or s == {"g", "r", "i", "z", "y"}
     ),
 )
 
@@ -243,9 +245,7 @@ JWST = AstroFluxModality(
     norm_bands=("f090w", "f277w", "f444w"),
     resize_extent=None,
     do_resize=False,
-    band_predicate=lambda s: any(
-        b.startswith("f") and b[1:].rstrip("w").isdigit() for b in s
-    ),
+    band_predicate=lambda s: any(b.startswith("f") and b[1:].rstrip("w").isdigit() for b in s),
 )
 
 LEGACYSURVEY = AstroFluxModality(
@@ -271,11 +271,6 @@ MODALITIES: dict[str, Modality] = {m.name: m for m in (JWST, HSC, LEGACYSURVEY, 
 def get_modality(name: str) -> Modality | None:
     """Return the registered modality, or None if unknown."""
     return MODALITIES.get(name)
-
-
-def register(modality: Modality) -> None:
-    """Add or replace a modality in the global registry."""
-    MODALITIES[modality.name] = modality
 
 
 def infer_from_bands(bands) -> str:

@@ -7,7 +7,7 @@ from skimage.filters import threshold_otsu
 from skimage.measure import label
 
 
-def otsu_threshold(img):
+def otsu_threshold(img: np.ndarray) -> tuple[np.ndarray, float]:
     """Apply Otsu's thresholding with Gaussian blur"""
     if len(img.shape) == 3:
         img_gray = np.mean(img, axis=2)
@@ -24,12 +24,12 @@ def otsu_threshold(img):
     return mask, threshold_val
 
 
-def find_center_blob_info(mask):
+def find_center_blob_info(mask: np.ndarray) -> tuple[int, tuple[int, int, int, int] | None]:
     """Find the size and extent of the contiguous blob at the center of the image"""
     center_h, center_w = mask.shape[0] // 2, mask.shape[1] // 2
 
     # Label connected components
-    labeled = label(mask.astype(int))
+    labeled = np.asarray(label(mask.astype(int)))  # skimage ships no stubs
 
     # Find which component the center pixel belongs to
     center_label = labeled[center_h, center_w]
@@ -55,7 +55,12 @@ def find_center_blob_info(mask):
     return center_blob_size, extent
 
 
-def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=None):
+def resize_galaxy_to_fit(
+    img: np.ndarray,
+    padding_ratio: float = 0.1,
+    target_size: int = 96,
+    force_extent: tuple[int, int, int, int] | None = None,
+) -> np.ndarray:
     """
     Estimate galaxy size and resize centered galaxy to 96x96
 
@@ -67,8 +72,7 @@ def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=No
             (min_row, max_row, min_col, max_col = force_extent)
 
     Returns:
-        resized_img: Galaxy resized to target_size x target_size
-        galaxy_size: Number of pixels in the contiguous center blob
+        The galaxy crop resized to target_size x target_size
     """
     # Get binary mask using Otsu's method
     mask, threshold = otsu_threshold(img)
@@ -79,10 +83,8 @@ def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=No
 
         if galaxy_size == 0 or extent is None:
             return img[
-                img.shape[0] // 2 - target_size // 2 : img.shape[0] // 2
-                + target_size // 2,
-                img.shape[1] // 2 - target_size // 2 : img.shape[1] // 2
-                + target_size // 2,
+                img.shape[0] // 2 - target_size // 2 : img.shape[0] // 2 + target_size // 2,
+                img.shape[1] // 2 - target_size // 2 : img.shape[1] // 2 + target_size // 2,
             ]
     else:
         galaxy_size = 0
@@ -91,8 +93,8 @@ def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=No
     min_row, max_row, min_col, max_col = extent
 
     # Calculate galaxy dimensions
-    galaxy_length = max([max_row - min_row + 1, max_col - min_col + 1])
-    pad = int(galaxy_length * padding_ratio)
+    galaxy_length: int = max([max_row - min_row + 1, max_col - min_col + 1])
+    pad = int(galaxy_length * padding_ratio)  # pi-lens-ignore: unchecked-throwing-call-python  # int×float truncation — cannot raise (rule targets int(str) parsing)
     # Calculate crop bounds (centered)
     center_h, center_w = img.shape[0] // 2, img.shape[1] // 2
     crop = galaxy_length + 2 * pad
@@ -111,7 +113,7 @@ def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=No
         return img[
             img.shape[0] // 2 - target_size // 2 : img.shape[0] // 2 + target_size // 2,
             img.shape[1] // 2 - target_size // 2 : img.shape[1] // 2 + target_size // 2,
-        ], 0
+        ]
 
     # Resize to target size (96x96)
     if len(galaxy_crop.shape) == 3:
@@ -123,7 +125,7 @@ def resize_galaxy_to_fit(img, padding_ratio=0.1, target_size=96, force_extent=No
         zoom_factor = target_size / max_dim
         resized = zoom(galaxy_crop, zoom_factor, order=1)
 
-    return resized
+    return np.asarray(resized)
 
 
 # Example usage
@@ -133,11 +135,10 @@ if __name__ == "__main__":
         img = np.array(next(ds)["image"])[:, :, 0]
 
         # Apply the galaxy resize function
-        resized_img, galaxy_size = resize_galaxy_to_fit(img, padding_ratio=0.15)
+        resized_img = resize_galaxy_to_fit(img, padding_ratio=0.15)
         f, axs = plt.subplots(1, 2, figsize=(6, 3))
         axs[0].imshow(resized_img)
         axs[1].imshow(img)
         plt.show()
 
-        print(f"Galaxy size: {galaxy_size} pixels")
         print(f"Output shape: {resized_img.shape}")
