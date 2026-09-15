@@ -1,4 +1,4 @@
-"""Benchmark suite for The Bazaar.
+"""Benchmark suite for Gestalt.
 
 Not part of the install surface: hosts the per-dataset MCCA-vs-single-model
 linear-probe sweeps that produced the published results. Use `bazaar bench`

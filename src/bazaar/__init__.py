@@ -1,4 +1,4 @@
-"""The Bazaar — aligned-basket galaxy embeddings.
+"""Gestalt — aligned-basket galaxy embeddings.
 
 Public API (three verbs):
 
@@ -19,6 +19,7 @@ who already have per-model embeddings. The benchmark sweep (GPA, naive-mean,
 linear probe) lives under `bazaar.bench` and is *not* part of this import
 surface; plots are rendered by the standalone `scripts/plot_*.py`.
 """
+
 from bazaar.align import mcca_fit, mcca_transform
 from bazaar.api import fit, load, run
 from bazaar.basket import BASKET

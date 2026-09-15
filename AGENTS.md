@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-The Bazaar is a library + CLI that aligns 22 frozen astronomy foundation-model embeddings (from `UniverseTBD/pu-embeddings`) into one shared latent via MCCA / Procrustes, ships the alignment as a reusable fit, and benchmarks the basket-mean against single-model baselines on a linear probe (redshift, log M★, sSFR for COSMOS-Web HSC×JWST). The alignment and probe code is task-agnostic; the basket and dataset wiring are not.
+Gestalt is a library + CLI that aligns 22 frozen astronomy foundation-model embeddings (from `UniverseTBD/pu-embeddings`) into one shared latent via MCCA / Procrustes, ships the alignment as a reusable fit, and benchmarks the basket-mean against single-model baselines on a linear probe (redshift, log M★, sSFR for COSMOS-Web HSC×JWST). The alignment and probe code is task-agnostic; the basket and dataset wiring are not.
 
 See `README.md` for the user-facing pitch and `docs/method.md` for the algorithm details (especially the V-matrix derivation that underpins `BazaarFit`).
 

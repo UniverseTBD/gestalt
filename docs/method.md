@@ -68,7 +68,7 @@ preserved exactly.
 ## <a name="vs-ensemble"></a>How is this different from an ensemble?
 
 Classical ensembles (bagging, stacking, boosting) train base learners
-*on the target task* and combine their *predictions*. The Bazaar is
+*on the target task* and combine their *predictions*. Gestalt is
 different on four axes:
 
 1. **Combination happens in feature space, not prediction space.** The

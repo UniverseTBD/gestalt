@@ -68,7 +68,7 @@ in `figs/transfer_*_table.tex`, strip plots in
 ## Probe geometry (`data/probes_1024.parquet`)
 
 3×3 cosine matrices between the redshift/log M★/sSFR probe weight
-vectors, per modality. The Bazaar latent's off-diagonal cosines fall
+vectors, per modality. Gestalt latent's off-diagonal cosines fall
 *outside* the 22-model spread in all six (pair × modality) cells —
 fusion is not an average of member geometries. Most strikingly, the HSC
 z–M★ cosine flips sign (+0.12 vs every member in [−0.22, −0.11]) to

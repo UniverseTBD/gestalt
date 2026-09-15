@@ -1,4 +1,4 @@
-"""Public Python API for The Bazaar.
+"""Public Python API for Gestalt.
 
 Three verbs:
 
@@ -8,6 +8,7 @@ Three verbs:
 - `load(fit_dir_or_repo)` — load a saved `BazaarFit` from a local directory
   or HF repo id (callable: `fit(other_input)`).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,7 @@ from bazaar.fit import BazaarFit
 # once the fits are pushed, so a repo update can't silently change results.
 DEFAULT_FIT_REPOS: dict[str, str] = {
     "jwst": "UniverseTBD/bazaar-cosmosweb-d256-jwst",
-    "hsc":  "UniverseTBD/bazaar-cosmosweb-d256-hsc",
+    "hsc": "UniverseTBD/bazaar-cosmosweb-d256-hsc",
 }
 
 
@@ -54,16 +55,21 @@ def run(
     """
     sig = basket_signature(BASKET)
     source = iter_galaxies(
-        str(input), split=split, max_samples=max_samples,
-        modality=modality, basket_signature=sig,
+        str(input),
+        split=split,
+        max_samples=max_samples,
+        modality=modality,
+        basket_signature=sig,
     )
     embeddings = embed_basket(
-        source, basket=BASKET, cache_dir=cache_dir, batch_size=batch_size,
+        source,
+        basket=BASKET,
+        cache_dir=cache_dir,
+        batch_size=batch_size,
     )
     fit_obj = _resolve_fit(fit, modality=source.modality)
     S = fit_obj.transform(embeddings)
-    print(f"[bazaar.run] {source.input}  modality={source.modality}  "
-          f"→ shared latent {S.shape}")
+    print(f"[bazaar.run] {source.input}  modality={source.modality}  → shared latent {S.shape}")
     if out is not None:
         out = Path(out)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -90,20 +96,29 @@ def fit(
     """
     sig = basket_signature(BASKET)
     source = iter_galaxies(
-        str(input), split=split, max_samples=max_samples,
-        modality=modality, basket_signature=sig,
+        str(input),
+        split=split,
+        max_samples=max_samples,
+        modality=modality,
+        basket_signature=sig,
     )
     embeddings = embed_basket(
-        source, basket=BASKET, cache_dir=cache_dir, batch_size=batch_size,
+        source,
+        basket=BASKET,
+        cache_dir=cache_dir,
+        batch_size=batch_size,
     )
-    print(f"[bazaar.fit] Fitting BazaarFit(D={D}) on "
-          f"{len(BASKET)} models × {next(iter(embeddings.values())).shape[0]} rows "
-          f"(modality={source.modality})...")
+    print(
+        f"[bazaar.fit] Fitting BazaarFit(D={D}) on "
+        f"{len(BASKET)} models × {next(iter(embeddings.values())).shape[0]} rows "
+        f"(modality={source.modality})..."
+    )
     fit_obj = BazaarFit.fit(embeddings, basket=BASKET, D=D, seed=seed)
     if out is not None:
         out = Path(out)
         out.mkdir(parents=True, exist_ok=True)
         fit_obj.save_pretrained(out)
+        # pi-lens-ignore: reportOptionalMemberAccess
         print(f"[bazaar.fit] Wrote fit → {out}/  (V={fit_obj.mcca_V.shape})")
     return fit_obj
 

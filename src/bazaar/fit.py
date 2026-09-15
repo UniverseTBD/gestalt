@@ -25,6 +25,7 @@ reduction. All dim reduction happens at the MCCA SVD, so V's row partitioning
 sums the per-model native widths. `config.json` pins the basket order so that
 partitioning is unambiguous when loading.
 """
+
 from __future__ import annotations
 
 import json
@@ -46,7 +47,7 @@ _MODEL_CARD_TEMPLATE = """---
 
 # BazaarFit
 
-A saved [The Bazaar](https://github.com/Smith42/the-bazaar) alignment fit:
+A saved [Gestalt](https://github.com/Smith42/the-bazaar) alignment fit:
 per-model PCA + z-score whitening and an MCCA projector that maps a basket of
 frozen foundation-model embeddings into one shared latent space.
 
@@ -140,6 +141,7 @@ class BazaarFit(
         if isinstance(input, dict):
             return self.transform(input)
         from bazaar.api import run  # local import: api → fit back-edge
+
         return run(input, fit=self, **kwargs)
 
     # ----- ModelHubMixin hooks -------------------------------------------------
@@ -187,14 +189,16 @@ class BazaarFit(
         if local.is_dir():
             fit_dir = local
         else:
-            fit_dir = Path(snapshot_download(
-                repo_id=str(model_id),
-                revision=revision,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                local_files_only=local_files_only,
-                token=token,
-            ))
+            fit_dir = Path(
+                snapshot_download(
+                    repo_id=str(model_id),
+                    revision=revision,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                )
+            )
 
         config = json.loads((fit_dir / "config.json").read_text())
         if config["schema_version"] != SCHEMA_VERSION:

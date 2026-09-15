@@ -2,7 +2,7 @@
   <img src="https://github.com/Smith42/the-bazaar/blob/master/docs/spidey.jpg?raw=true" width="42%">
 </p>
 
-# 🛒 The Bazaar 🛒
+# 🛒 Gestalt 🛒
 
 > *"Given enough eyeballs, all bugs are shallow."* — Linus's Law
 >
@@ -16,7 +16,7 @@ Currently wired up for COSMOS-Web HSC × JWST imagery and three physical
 properties (redshift, log M★, sSFR), but the alignment and probe code is
 task-agnostic.
 
-The Bazaar is a stall-by-stall view of representation learning: each
+Gestalt is a stall-by-stall view of representation learning: each
 foundation model brings its own goods (its own coordinate system on the
 same galaxies), and we ask whether the *aggregate* of the bazaar
 beats the best single vendor. Spoiler: yes, but only if you align the
@@ -142,7 +142,7 @@ bazaar push fits/hsc-d256 you/your-fit
 Both `run` and `fit` accept:
 
 | flag | default | description |
-|------|---------|-------------|
+| ------ | --------- | ------------- |
 | `--split` | `train` | dataset split to stream |
 | `--max-samples N` | all | cap on galaxies ingested |
 | `--modality {hsc,jwst,legacysurvey}` | inferred | override band-set detection |
