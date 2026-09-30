@@ -20,11 +20,11 @@ uv sync  # or: pip install -e .
 ## Create a joint embedding
 
 Pass a Hugging Face dataset ID or a local path. Gestalt streams the images,
-infers the imaging modality from the bands, embeds every row, and applies the
-matching saved alignment fit.
+infers the imaging modality from the bands, embeds every row, and applies a
+saved local alignment fit.
 
 ```bash
-gestalt run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out joint.npy
+gestalt run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --fit fits/mine --out joint.npy
 ```
 
 The first run downloads the model weights and caches each model's embeddings
@@ -37,6 +37,7 @@ from gestalt import run
 
 joint = run(
     "UniverseTBD/mmu_hsc_pdr3_dud_22.5",
+    fit="fits/mine",
     out="joint.npy",
 )  # (N, D) float32 ndarray
 ```
