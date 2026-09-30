@@ -2781,7 +2781,7 @@ wheels = [
 ]
 
 [[package]]
-name = "the-bazaar"
+name = "gestalt"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [

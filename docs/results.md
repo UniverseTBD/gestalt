@@ -94,13 +94,13 @@ COSMOS-Web. Ordering, consistent across all six cells:
 ## Reproducibility
 
 ```bash
-bazaar bench cosmos --D 1024 --out data/cosmos_1024.parquet --emb-dir embeds
-bazaar bench gz10 --out data/results_pca1024_gz10.parquet
-bazaar bench galaxies --out data/results_pca1024_galaxies.parquet
-bazaar bench scaling --out data/scaling.parquet
-bazaar bench probes --D 1024 --out data/probes_1024.parquet
+gestalt bench cosmos --D 1024 --out data/cosmos_1024.parquet --emb-dir embeds
+gestalt bench gz10 --out data/results_pca1024_gz10.parquet
+gestalt bench galaxies --out data/results_pca1024_galaxies.parquet
+gestalt bench scaling --out data/scaling.parquet
+gestalt bench probes --D 1024 --out data/probes_1024.parquet
 for t in cosmos-hsc cosmos-jwst gz10 galaxies; do
-    bazaar bench transfer --target $t --out data/transfer_$t.parquet
+    gestalt bench transfer --target $t --out data/transfer_$t.parquet
 done
 uv run scripts/plot_basket_vs_singles.py    # paper Fig 1 + Wilcoxon stats
 uv run scripts/gen_latex_tables.py          # figs/*_table.tex

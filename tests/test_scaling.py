@@ -1,10 +1,11 @@
-"""Tests for the basket-pruning sweep (`bazaar bench scaling`)."""
+"""Tests for the basket-pruning sweep (`gestalt bench scaling`)."""
+
 from __future__ import annotations
 
 import numpy as np
 
-from bazaar.basket import BASKET
-from bazaar.bench.scaling import (
+from gestalt.basket import BASKET
+from gestalt.bench.scaling import (
     build_basket_sources_subset,
     iter_full_basket,
     iter_one_per_family_subsets,
@@ -76,9 +77,12 @@ def _synthetic_basket():
     n, D_shared = 300, 8
     factors = rng.standard_normal((n, D_shared)).astype(np.float32)
     basket = [
-        ("famA", "s1"), ("famA", "s2"),
-        ("famB", "s1"), ("famB", "s2"),
-        ("famC", "s1"), ("famC", "s2"),
+        ("famA", "s1"),
+        ("famA", "s2"),
+        ("famB", "s1"),
+        ("famB", "s2"),
+        ("famC", "s1"),
+        ("famC", "s2"),
     ]
     widths = [32, 48, 24, 40, 56, 36]
     embeddings: dict[str, np.ndarray] = {}
@@ -96,7 +100,9 @@ def test_build_basket_sources_subset_shapes_and_finite():
 
     # Random subset of 3 of 6.
     sources = build_basket_sources_subset(
-        Zs_white, subset_names=names[:3], D=16,
+        Zs_white,
+        subset_names=names[:3],
+        D=16,
         log_prefix="[test]",
     )
     by_name = dict(sources)
@@ -108,16 +114,21 @@ def test_build_basket_sources_subset_shapes_and_finite():
 
 def test_build_basket_sources_subset_full_basket_matches_runner():
     """When the subset is the full basket, MCCA output equals `_runner`'s."""
-    from bazaar.bench._runner import build_basket_sources
+    from gestalt.bench._runner import build_basket_sources
 
     embeddings, basket = _synthetic_basket()
     names = [f"{f}_{s}" for f, s in basket]
     Zs_white = precompute_full_whitened(embeddings, names)
 
     runner_sources = dict(build_basket_sources(embeddings, names, D=16))
-    subset_sources = dict(build_basket_sources_subset(
-        Zs_white, subset_names=names, D=16, log_prefix="[test]",
-    ))
+    subset_sources = dict(
+        build_basket_sources_subset(
+            Zs_white,
+            subset_names=names,
+            D=16,
+            log_prefix="[test]",
+        )
+    )
     # MCCA output must be bit-for-bit identical (same whitening, same seed).
     np.testing.assert_array_equal(
         subset_sources["basket_mcca_whitened"],

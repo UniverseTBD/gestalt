@@ -1,10 +1,11 @@
-"""Tests for `bazaar bench probes` (PU Fig 4 cosine matrix replication)."""
+"""Tests for `gestalt bench probes` (PU Fig 4 cosine matrix replication)."""
+
 from __future__ import annotations
 
 import numpy as np
 
-from bazaar.bench._probe_coeffs import fit_probe_coeffs
-from bazaar.bench.probe_geometry import (
+from gestalt.bench._probe_coeffs import fit_probe_coeffs
+from gestalt.bench.probe_geometry import (
     PROPERTIES,
     _three_probe_cos_matrix,
     run_probes,
@@ -12,7 +13,11 @@ from bazaar.bench.probe_geometry import (
 
 
 def _synthetic_basket_with_known_directions(
-    n: int = 4000, d: int = 64, D: int = 8, n_models: int = 4, seed: int = 0,
+    n: int = 4000,
+    d: int = 64,
+    D: int = 8,
+    n_models: int = 4,
+    seed: int = 0,
 ):
     """Basket where (z, M★, sSFR) sit on three known factor directions.
 
@@ -26,13 +31,13 @@ def _synthetic_basket_with_known_directions(
     # Make M★ and sSFR mildly anti-correlated by giving them a shared
     # negative component.
     mass = base[:, 1].copy()
-    ssfr = -0.4 * mass + np.sqrt(1 - 0.4 ** 2) * base[:, 2]
+    ssfr = -0.4 * mass + np.sqrt(1 - 0.4**2) * base[:, 2]
     factors = base.copy()
     factors[:, 2] = ssfr.astype(np.float32)
     labels = {
         "redshift": factors[:, 0].copy(),
-        "mass":     factors[:, 1].copy(),
-        "sSFR":     factors[:, 2].copy(),
+        "mass": factors[:, 1].copy(),
+        "sSFR": factors[:, 2].copy(),
     }
 
     basket = [("fam", f"m{i:02d}") for i in range(n_models)]
@@ -94,14 +99,23 @@ def test_three_probe_cos_matrix_recovers_negative_ssfr_mass():
 
 
 def test_run_probes_schema_and_basket_avg_consistency():
-    """End-to-end on the synthetic basket: emit Bazaar + 4 per-model + basket-avg
+    """End-to-end on the synthetic basket: emit Gestalt + 4 per-model + basket-avg
     rows; basket_avg must equal elementwise mean of the per-model matrices.
     """
     embeddings, basket, labels = _synthetic_basket_with_known_directions(
-        n=2000, d=32, D=8, n_models=4, seed=3,
+        n=2000,
+        d=32,
+        D=8,
+        n_models=4,
+        seed=3,
     )
     rows = run_probes(
-        "hsc", embeddings, labels, basket, D=8, seed=0,
+        "hsc",
+        embeddings,
+        labels,
+        basket,
+        D=8,
+        seed=0,
     )
     # Schema: each source emits 9 rows (3×3 matrix).
     sources = {r["source"] for r in rows}
@@ -109,7 +123,7 @@ def test_run_probes_schema_and_basket_avg_consistency():
     assert "basket_avg" in sources
     n_singles = sum(1 for s in sources if s.startswith("single_"))
     assert n_singles == len(basket)
-    # 1 (bazaar) + len(basket) (per-model) + 1 (avg) → 9 rows each.
+    # 1 (gestalt) + len(basket) (per-model) + 1 (avg) → 9 rows each.
     expected = (1 + n_singles + 1) * 9
     assert len(rows) == expected
     # Every cosine is in [-1, 1]; diagonals are exactly 1.
@@ -135,22 +149,31 @@ def test_run_probes_schema_and_basket_avg_consistency():
 
 
 def test_run_probes_recovers_negative_ssfr_mass_off_diagonal():
-    """With label-level anti-correlation between M★ and sSFR, Bazaar's
+    """With label-level anti-correlation between M★ and sSFR, Gestalt's
     off-diagonal cos(M★, sSFR) should come out clearly negative.
     """
     embeddings, basket, labels = _synthetic_basket_with_known_directions(
-        n=3000, d=32, D=8, n_models=4, seed=4,
+        n=3000,
+        d=32,
+        D=8,
+        n_models=4,
+        seed=4,
     )
     rows = run_probes(
-        "hsc", embeddings, labels, basket, D=8, seed=0,
+        "hsc",
+        embeddings,
+        labels,
+        basket,
+        D=8,
+        seed=0,
     )
-    bazaar_rows = [
-        r for r in rows
-        if r["source"] == "basket_mcca_whitened"
-        and r["prop_i"] == "mass" and r["prop_j"] == "sSFR"
+    gestalt_rows = [
+        r
+        for r in rows
+        if r["source"] == "basket_mcca_whitened" and r["prop_i"] == "mass" and r["prop_j"] == "sSFR"
     ]
-    assert len(bazaar_rows) == 1
-    cos = bazaar_rows[0]["cos"]
+    assert len(gestalt_rows) == 1
+    cos = gestalt_rows[0]["cos"]
     # Anti-correlation between labels (≈ -0.4) is preserved through the
     # basket; allow generous slack for MCCA / probe sampling noise.
     assert cos < -0.1
@@ -158,7 +181,11 @@ def test_run_probes_recovers_negative_ssfr_mass_off_diagonal():
 
 def test_run_probes_row_count_mismatch_errors():
     embeddings, basket, labels = _synthetic_basket_with_known_directions(
-        n=500, d=16, D=4, n_models=3, seed=5,
+        n=500,
+        d=16,
+        D=4,
+        n_models=3,
+        seed=5,
     )
     bad_labels = {**labels, "redshift": np.zeros(100, dtype=np.float32)}
     try:

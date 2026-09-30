@@ -7,7 +7,7 @@ For each telescope `M ∈ {hsc, jwst}`:
 1. **Load** all 22 pre-published `.npy` embeddings `E_m ∈ R^{N × d_m}`
    from `UniverseTBD/pu-embeddings/cosmosweb/`. Native dims `d_m` range
    from 384 (AstroPT-015M) to 5120 (LLaVA-1.5-13B).
-2. **PCA + z-score** (`bazaar.whiten.pca_zscore_fit`). Randomised-SVD
+2. **PCA + z-score** (`gestalt.whiten.pca_zscore_fit`). Randomised-SVD
    PCA to `min(D, d_m)` components (D = 1024 for the canonical sweep),
    then per-feature z-score on the full N=45 000 rows. Output:
    `Ẑ_m ∈ R^{N × min(D, d_m)}` for each model.
@@ -18,7 +18,7 @@ For each telescope `M ∈ {hsc, jwst}`:
    - `B_concat_pca`: PCA-to-D on the raw 22-model horizontal
      concatenation (no per-model whitening) — a baseline that lets the
      SVD pick a global subspace without an alignment step.
-4. **Linear probe** (`bazaar.bench.linear_probe.run_probe`) on each basket
+4. **Linear probe** (`gestalt.bench.linear_probe.run_probe`) on each basket
    source and each single-model `Ẑ_m`, for `y ∈ {redshift, log M★, sSFR}`
    and five repeated random splits.
 
@@ -48,7 +48,7 @@ shared latent is `S = U Σ`, and equivalently `S = C V` where
 into the same coordinate system**: build `C_new` from new per-model
 whitened features and compute `S_new = C_new V`.
 
-`bazaar.fit.BazaarFit` persists everything needed to redo the
+`gestalt.fit.GestaltFit` persists everything needed to redo the
 preprocessing on new rows:
 
 ```
@@ -58,7 +58,7 @@ preprocessing on new rows:
 └── mcca.safetensors                  V (Σ d_m × D)
 ```
 
-`BazaarFit.transform(new_embeddings)` runs each model's saved PCA + z-score
+`GestaltFit.transform(new_embeddings)` runs each model's saved PCA + z-score
 on the new rows (`(E − μ) @ componentsᵀ`, then `(z − μ_z) / σ_z`),
 concatenates the result into `C_new`, and returns `C_new @ V`. On the fit
 data itself this differs from `S_fit = U Σ` only by randomized-SVD
@@ -97,7 +97,7 @@ The closest classical analogue is a **feature-level concatenation
 baseline** (concat all 22 embeddings → 8000-d vector → probe). That
 would also probably win, but for a different reason: the probe gets to
 *supervised*-pick whichever model's coordinates it likes per task. The
-Bazaar's MCCA step forces an unsupervised commitment to a shared
+Gestalt's MCCA step forces an unsupervised commitment to a shared
 subspace *before* the probe sees any labels. That's why a basket win
 here is evidence for **representational convergence**; a concat win
 would only be evidence that probes are good at feature selection.
@@ -105,10 +105,10 @@ would only be evidence that probes are good at feature selection.
 ## Cross-survey generalization (§3.2)
 
 `bench transfer` operates one rung above the per-corpus sweeps: instead of
-training and evaluating a `BazaarFit` on the same corpus, it fits on
+training and evaluating a `GestaltFit` on the same corpus, it fits on
 corpus A and probes on corpus B's labels. For each (target T, source S),
-fit `BazaarFit(D)` on the first `n_fit` rows of S's 22-model embeddings,
-project T's full embeddings through it with `BazaarFit.transform`, then
+fit `GestaltFit(D)` on the first `n_fit` rows of S's 22-model embeddings,
+project T's full embeddings through it with `GestaltFit.transform`, then
 run `run_probe` / `run_classification_probe` on T's labels. A
 `concat→PCA-to-D` projector fit on the same S rows runs alongside as a
 transferable baseline — without it, a positive transfer result can't be

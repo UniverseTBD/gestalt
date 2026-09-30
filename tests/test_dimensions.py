@@ -1,26 +1,31 @@
-"""Tests for `bazaar bench dims` (per-dimension covariate regression).
+"""Tests for `gestalt bench dims` (per-dimension covariate regression).
 
 Strategy: build a synthetic basket with low-rank shared structure driven by a
 known set of factors. Then construct covariates that have known linear
-relationships to those factors. After fitting Bazaar, the resulting S spans
+relationships to those factors. After fitting Gestalt, the resulting S spans
 the factor subspace (up to rotation), so each covariate's max R² over dims
 should be close to 1.0; unrelated noise covariates should have low max R².
 """
+
 from __future__ import annotations
 
 import numpy as np
 
-from bazaar.bench.dimensions import _pairwise_r2, run_dimensions
+from gestalt.bench.dimensions import _pairwise_r2, run_dimensions
 
 
 def _synthetic_basket(
-    n: int = 4000, d: int = 64, D: int = 8, n_models: int = 4, seed: int = 0,
+    n: int = 4000,
+    d: int = 64,
+    D: int = 8,
+    n_models: int = 4,
+    seed: int = 0,
 ) -> tuple[dict[str, np.ndarray], list[tuple[str, str]], np.ndarray]:
     """A small basket with low-rank shared structure across views.
 
     Returns (embeddings, basket, factors). `factors` is the latent (N, D)
     factor matrix that drives every view, so covariates correlated with
-    individual factor columns will be recoverable from the Bazaar S.
+    individual factor columns will be recoverable from the Gestalt S.
     """
     rng = np.random.default_rng(seed)
     factors = rng.standard_normal((n, D)).astype(np.float32)
@@ -81,21 +86,29 @@ def test_pairwise_r2_handles_nan_mask():
 def test_run_dimensions_recovers_factor_signal():
     """End-to-end on the synthetic basket: covariate = factor_k → max r² ≈ 1."""
     embeddings, basket, factors = _synthetic_basket(
-        n=2000, d=48, D=8, n_models=4, seed=3,
+        n=2000,
+        d=48,
+        D=8,
+        n_models=4,
+        seed=3,
     )
     rng = np.random.default_rng(4)
     # Two covariates that linearly track factors, one pure-noise covariate.
     cov = {
         "track_factor0": factors[:, 0].copy(),
         "track_factor5": factors[:, 5].copy(),
-        "pure_noise":    rng.standard_normal(factors.shape[0]).astype(np.float32),
+        "pure_noise": rng.standard_normal(factors.shape[0]).astype(np.float32),
     }
-    groups = {"track_factor0": "physics",
-              "track_factor5": "physics",
-              "pure_noise":    "systematics"}
+    groups = {"track_factor0": "physics", "track_factor5": "physics", "pure_noise": "systematics"}
 
     rows = run_dimensions(
-        "hsc", embeddings, cov, groups, basket, D=8, seed=0,
+        "hsc",
+        embeddings,
+        cov,
+        groups,
+        basket,
+        D=8,
+        seed=0,
     )
     # Long-form schema sanity.
     assert {r["modality"] for r in rows} == {"hsc"}
@@ -110,8 +123,8 @@ def test_run_dimensions_recovers_factor_signal():
         assert len(r2s) == 8
 
     # MCCA rotates the factor subspace, so a single factor smears across
-    # multiple Bazaar dims. The right "covariate is captured by S" test is
-    # that the per-dim r² values sum to ≈ 1 (Bazaar's columns are orthogonal
+    # multiple Gestalt dims. The right "covariate is captured by S" test is
+    # that the per-dim r² values sum to ≈ 1 (Gestalt's columns are orthogonal
     # post-SVD, so ∑ r²_d is the multivariate R² of cov ~ S). For pure noise
     # the sum should be near zero.
     assert sum(by_cov["track_factor0"]) > 0.85
@@ -127,7 +140,13 @@ def test_run_dimensions_row_count_mismatch_errors():
     groups = {"too_short": "physics"}
     try:
         run_dimensions(
-            "hsc", embeddings, cov, groups, basket, D=4, seed=0,
+            "hsc",
+            embeddings,
+            cov,
+            groups,
+            basket,
+            D=4,
+            seed=0,
         )
     except RuntimeError as e:
         assert "row mismatch" in str(e)

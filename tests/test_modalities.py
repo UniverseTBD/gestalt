@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from bazaar.basket import emb_npy_path
-from bazaar.embed.preprocess import flux_to_pil
-from bazaar.modalities import (
+from gestalt.basket import emb_npy_path
+from gestalt.embed.preprocess import flux_to_pil
+from gestalt.modalities import (
     HSC,
     JWST,
     LEGACYSURVEY,
