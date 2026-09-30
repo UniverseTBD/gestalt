@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/Smith42/gestalt/blob/master/docs/spidey.jpg?raw=true" alt="Gestalt" width="42%">
+  <img src="https://github.com/Smith42/gestalt/blob/master/docs/spidey.jpg?raw=true" alt="Gestalt" width="75%">
 </p>
 
 # 🧩 Gestalt 🧩
