@@ -1,16 +1,21 @@
-"""Tests for BazaarFit fit/transform/save/load round-trips."""
+"""Tests for GestaltFit fit/transform/save/load round-trips."""
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from bazaar.align import mcca_fit
-from bazaar.fit import BazaarFit
-from bazaar.whiten import pca_zscore_fit
+from gestalt.align import mcca_fit
+from gestalt.fit import GestaltFit
+from gestalt.whiten import pca_zscore_fit
 
 
 def _synthetic_basket(
-    n: int = 4000, d: int = 64, D: int = 16, n_models: int = 4, seed: int = 0,
+    n: int = 4000,
+    d: int = 64,
+    D: int = 16,
+    n_models: int = 4,
+    seed: int = 0,
 ) -> tuple[dict[str, np.ndarray], list[tuple[str, str]]]:
     """A small basket with low-rank shared structure across views.
 
@@ -31,24 +36,24 @@ def _synthetic_basket(
 def test_fit_is_full_rank_per_model():
     """Per-model PCA goes to native rank min(d_in, N) — no truncation to D."""
     embeddings, basket = _synthetic_basket(n=4000, d=64, D=16)
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
     # Each per-model PCA stores 64 components (d_in), not D=16.
     for art in fit.pca.values():
         assert art["pca_components"].shape == (64, 64)
         assert art["zscore_mu"].shape == (1, 64)
     # V's row dim is the sum of per-model widths (here 4 * 64), not M*D.
+    assert fit.mcca_V is not None
     assert fit.mcca_V.shape == (4 * 64, 16)
 
 
 def test_fit_stores_same_V_as_direct_mcca():
-    """BazaarFit.fit's V matches `mcca_fit` invoked on the same internal Zs."""
+    """GestaltFit.fit's V matches `mcca_fit` invoked on the same internal Zs."""
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
 
     # Reconstruct the exact fit-time Zs (full-rank PCA + zscore per view).
     Zs_ref = [
-        pca_zscore_fit(embeddings[f"{f}_{s}"], D=embeddings[f"{f}_{s}"].shape[1],
-                       seed=0)[0]
+        pca_zscore_fit(embeddings[f"{f}_{s}"], D=embeddings[f"{f}_{s}"].shape[1], seed=0)[0]
         for f, s in basket
     ]
     V_ref, _ = mcca_fit(Zs_ref, D=16, seed=0)
@@ -62,11 +67,10 @@ def test_transform_on_fit_data_recovers_subspace():
     (randomized-SVD approximation), but the column space is preserved.
     """
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
 
     Zs_ref = [
-        pca_zscore_fit(embeddings[f"{f}_{s}"], D=embeddings[f"{f}_{s}"].shape[1],
-                       seed=0)[0]
+        pca_zscore_fit(embeddings[f"{f}_{s}"], D=embeddings[f"{f}_{s}"].shape[1], seed=0)[0]
         for f, s in basket
     ]
     _, S_ref = mcca_fit(Zs_ref, D=16, seed=0)
@@ -79,9 +83,9 @@ def test_transform_on_fit_data_recovers_subspace():
 
 def test_save_load_round_trip(tmp_path):
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
     fit.save_pretrained(tmp_path / "fit")
-    reloaded = BazaarFit.from_pretrained(tmp_path / "fit")
+    reloaded = GestaltFit.from_pretrained(tmp_path / "fit")
 
     assert reloaded.D == fit.D
     assert reloaded.seed == fit.seed
@@ -92,7 +96,9 @@ def test_save_load_round_trip(tmp_path):
             np.testing.assert_array_equal(reloaded.pca[key][ak], av)
 
     np.testing.assert_allclose(
-        reloaded.transform(embeddings), fit.transform(embeddings), atol=0,
+        reloaded.transform(embeddings),
+        fit.transform(embeddings),
+        atol=0,
     )
 
 
@@ -101,7 +107,7 @@ def test_save_pretrained_writes_safetensors(tmp_path):
     from safetensors.numpy import load_file
 
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
     fit.save_pretrained(tmp_path / "fit")
 
     fit_dir = tmp_path / "fit"
@@ -114,6 +120,7 @@ def test_save_pretrained_writes_safetensors(tmp_path):
 
     loaded = load_file(fit_dir / "mcca.safetensors")
     assert "V" in loaded
+    assert fit.mcca_V is not None
     assert loaded["V"].shape == fit.mcca_V.shape
 
 
@@ -123,7 +130,7 @@ def test_held_out_transform_uses_same_basis(tmp_path):
     train = {k: v[:4000] for k, v in embeddings.items()}
     test = {k: v[4000:] for k, v in embeddings.items()}
 
-    fit = BazaarFit.fit(train, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(train, basket=basket, D=16, seed=0)
     S_test = fit.transform(test)
 
     assert S_test.shape == (1000, 16)
@@ -133,7 +140,7 @@ def test_held_out_transform_uses_same_basis(tmp_path):
 
 def test_mismatched_basket_raises(tmp_path):
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
     bad = {k: v for k, v in embeddings.items() if k != f"{basket[0][0]}_{basket[0][1]}"}
     with pytest.raises(KeyError):
         fit.transform(bad)
@@ -144,7 +151,7 @@ def test_legacy_schema_rejected(tmp_path):
     import json
 
     embeddings, basket = _synthetic_basket()
-    fit = BazaarFit.fit(embeddings, basket=basket, D=16, seed=0)
+    fit = GestaltFit.fit(embeddings, basket=basket, D=16, seed=0)
     fit.save_pretrained(tmp_path / "legacy")
     config_path = tmp_path / "legacy" / "config.json"
     config = json.loads(config_path.read_text())
@@ -152,4 +159,4 @@ def test_legacy_schema_rejected(tmp_path):
     config_path.write_text(json.dumps(config))
 
     with pytest.raises(ValueError, match="Unsupported schema_version"):
-        BazaarFit.from_pretrained(tmp_path / "legacy")
+        GestaltFit.from_pretrained(tmp_path / "legacy")

@@ -4,12 +4,13 @@ Network-free: we exercise the source-metadata bookkeeping, the
 paper-faithful target column spec, and the value-resolution helper that
 converts metadata rows into the 13 regression targets.
 """
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from bazaar._ingest.galaxies import (
+from gestalt._ingest.galaxies import (
     GALAXIES_DATASET,
     GALAXIES_MODALITY,
     GALAXIES_REVISION,
@@ -18,8 +19,8 @@ from bazaar._ingest.galaxies import (
     _resolve_target,
     galaxies_source,
 )
-from bazaar.bench.galaxies import PROPERTIES
-from bazaar.bench.linear_probe import run_probe
+from gestalt.bench.galaxies import PROPERTIES
+from gestalt.bench.linear_probe import run_probe
 
 
 def test_galaxies_source_metadata():
@@ -59,9 +60,19 @@ def test_paper_targets_match_bench_properties():
 def test_paper_targets_cover_paper_table():
     # Sanity-check the 13 paper targets are all present by name.
     expected = {
-        "mag_abs_g", "mag_abs_z", "g_minus_r", "r_minus_z",
-        "photo_z", "spec_z", "mean_ssfr", "log_mstar",
-        "smooth", "disc", "artifact", "edge_on", "tight_spiral",
+        "mag_abs_g",
+        "mag_abs_z",
+        "g_minus_r",
+        "r_minus_z",
+        "photo_z",
+        "spec_z",
+        "mean_ssfr",
+        "log_mstar",
+        "smooth",
+        "disc",
+        "artifact",
+        "edge_on",
+        "tight_spiral",
     }
     assert set(GALAXIES_TARGETS) == expected
 
@@ -91,8 +102,7 @@ def test_run_probe_works_on_galaxies_target_shape():
     rng = np.random.default_rng(7)
     N, D = 600, 16
     X = rng.standard_normal((N, D)).astype(np.float32)
-    y = (0.5 * X[:, 0] - 0.3 * X[:, 1]
-         + 0.05 * rng.standard_normal(N)).astype(np.float32)
+    y = (0.5 * X[:, 0] - 0.3 * X[:, 1] + 0.05 * rng.standard_normal(N)).astype(np.float32)
     y[:80] = np.nan  # sparse target — mirrors sSFR/M* coverage
     r2 = run_probe(X, y, test_size=80, random_state=0)
     assert r2 > 0.8

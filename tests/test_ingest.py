@@ -1,11 +1,12 @@
-"""Tests for `bazaar._ingest.hf_streaming` fingerprint determinism.
+"""Tests for `gestalt._ingest.hf_streaming` fingerprint determinism.
 
 Modality inference is now tested in `test_modalities.py` (the inference logic
-moved into `bazaar.modalities.infer_from_bands`).
+moved into `gestalt.modalities.infer_from_bands`).
 """
+
 from __future__ import annotations
 
-from bazaar._ingest.hf_streaming import _fingerprint
+from gestalt._ingest.hf_streaming import _fingerprint
 
 
 def test_fingerprint_is_deterministic_and_sensitive():

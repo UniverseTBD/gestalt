@@ -24,7 +24,7 @@ infers the imaging modality from the bands, embeds every row, and applies the
 matching saved alignment fit.
 
 ```bash
-bazaar run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out joint.npy
+gestalt run UniverseTBD/mmu_hsc_pdr3_dud_22.5 --out joint.npy
 ```
 
 The first run downloads the model weights and caches each model's embeddings
@@ -33,7 +33,7 @@ under `./embeds`. The output is an `(N, D)` NumPy array.
 The same operation is available in Python:
 
 ```python
-from bazaar import run
+from gestalt import run
 
 joint = run(
     "UniverseTBD/mmu_hsc_pdr3_dud_22.5",
@@ -47,12 +47,12 @@ Fit once on a representative catalog, then use that fit to place compatible
 new catalogs in the same coordinate system:
 
 ```bash
-bazaar fit my/catalog --D 1024 --out fits/mine
-bazaar run my/new-catalog --fit fits/mine --out joint.npy
+gestalt fit my/catalog --D 1024 --out fits/mine
+gestalt run my/new-catalog --fit fits/mine --out joint.npy
 ```
 
 ```python
-from bazaar import fit, load
+from gestalt import fit, load
 
 alignment = fit("my/catalog", D=1024, out="fits/mine")
 joint = alignment("my/new-catalog")
@@ -66,21 +66,21 @@ can be loaded from a local directory or a Hugging Face Hub repository and can
 be published with:
 
 ```bash
-bazaar push fits/mine you/your-fit
+gestalt push fits/mine you/your-fit
 ```
 
 ## Use existing model embeddings
 
 If the 22 per-model embeddings are already available as NumPy arrays, skip
-image inference and work directly with `BazaarFit`:
+image inference and work directly with `GestaltFit`:
 
 ```python
-from bazaar import BASKET, BazaarFit
+from gestalt import BASKET, GestaltFit
 
-alignment = BazaarFit.fit(per_model_embeddings, basket=BASKET, D=1024)
+alignment = GestaltFit.fit(per_model_embeddings, basket=BASKET, D=1024)
 alignment.save_pretrained("fits/mine")
 
-alignment = BazaarFit.from_pretrained("fits/mine")
+alignment = GestaltFit.from_pretrained("fits/mine")
 joint = alignment.transform(new_per_model_embeddings)
 ```
 

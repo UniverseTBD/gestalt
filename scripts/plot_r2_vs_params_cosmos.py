@@ -6,8 +6,10 @@ Mirrors the scatter style of `pu/scripts/plot_r2_vs_params.py` (on the
 log-linear regression line through all single-model points, and a
 Spearman ρ + p annotation. Adds horizontal bands for each basket-fusion
 variant so the single-model scatter can be compared against the basket
-in one frame — that overlay is the bazaar-specific extension.
+in one frame — that overlay is the gestalt-specific extension.
 """
+
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false
 
 from __future__ import annotations
 

@@ -10,10 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from bazaar._ingest.gz10 import _fingerprint, gz10_source
-from bazaar.bench.gz10 import _probe_one
-from bazaar.bench.linear_probe import run_classification_probe, run_probe
-from bazaar.embed.preprocess import flux_to_pil
+from gestalt._ingest.gz10 import _fingerprint, gz10_source
+from gestalt.bench.gz10 import _probe_one
+from gestalt.bench.linear_probe import run_classification_probe, run_probe
+from gestalt.embed.preprocess import flux_to_pil
 
 
 def test_flux_to_pil_rendered_short_circuit_resizes():

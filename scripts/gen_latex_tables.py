@@ -1,4 +1,4 @@
-"""Generate LaTeX tables for the three Bazaar benchmarks.
+"""Generate LaTeX tables for the three Gestalt benchmarks.
 
 Reads parquet files from ``data/`` and writes one ``\\begin{table*}`` per
 benchmark into ``figs/``. Wide tables are wrapped in ``\\resizebox`` so they
