@@ -1,6 +1,6 @@
 """Gestalt CLI: three user verbs (run / fit / push) and a bench verb.
 
-- `gestalt run   <input>`            — embed + transform via shipped or supplied fit
+- `gestalt run   <input>`            — embed + transform via a supplied fit
 - `gestalt fit   <input>`            — embed + fit a fresh GestaltFit
 - `gestalt push  <fit_dir> <repo>`   — publish a saved fit to the HF Hub
 - `gestalt bench {cosmos,gz10,galaxies} ...` — the dataset benchmark sweeps
@@ -424,8 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     _add_run_fit_shared(run_p)
     run_p.add_argument(
         "--fit",
-        default="default",
-        help="'default' (shipped fit), a local directory, or a HuggingFace repo id (e.g. org/repo)",
+        required=True,
+        help="Local fit directory or Hugging Face repo id (e.g. org/repo)",
     )
     run_p.add_argument("--out", type=Path, default=Path("unified.npy"))
     run_p.set_defaults(func=cmd_run)

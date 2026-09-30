@@ -4,11 +4,11 @@ Public API (three verbs):
 
     from gestalt import run, fit, load
 
-    # Embed and apply the shipped fit
-    embs = run("UniverseTBD/mmu_hsc_pdr3_dud_22.5")
-
     # Fit a fresh GestaltFit
     fit_obj = fit("UniverseTBD/mmu_hsc_pdr3_dud_22.5", D=1024, out="fits/mine")
+
+    # Embed and apply the saved fit
+    embs = run("UniverseTBD/some_other_dataset", fit="fits/mine")
 
     # Reload a saved fit (callable: pass an input to embed + transform)
     fit_obj = load("fits/mine")

@@ -2,8 +2,8 @@
 
 Three verbs:
 
-- `run(input)` — embed `input` through the 22-model basket and project to a
-  unified shared latent via the shipped (or supplied) `GestaltFit`.
+- `run(input, fit=...)` — embed `input` through the 22-model basket and project
+  to a unified shared latent via a supplied `GestaltFit`.
 - `fit(input)` — embed `input` and fit a fresh `GestaltFit` at the requested D.
 - `load(fit_dir_or_repo)` — load a saved `GestaltFit` from a local directory
   or HF repo id (callable: `fit(other_input)`).
@@ -20,27 +20,11 @@ from gestalt.basket import BASKET, basket_signature
 from gestalt.embed import embed_basket
 from gestalt.fit import GestaltFit
 
-# TODO(release): these resolve `main` at call time — pin to commit revisions
-# once the fits are pushed, so a repo update can't silently change results.
-DEFAULT_FIT_REPOS: dict[str, str] = {
-    "jwst": "UniverseTBD/gestalt-cosmosweb-d256-jwst",
-    "hsc": "UniverseTBD/gestalt-cosmosweb-d256-hsc",
-}
-
-
-def _resolve_fit(fit: str | Path | GestaltFit, *, modality: str | None = None) -> GestaltFit:
-    if isinstance(fit, GestaltFit):
-        return fit
-    if str(fit) == "default":
-        repo = DEFAULT_FIT_REPOS[modality or "jwst"]
-        return GestaltFit.from_pretrained(repo)
-    return GestaltFit.from_pretrained(str(fit))
-
 
 def run(
     input: str | Path,
     *,
-    fit: str | Path | GestaltFit = "default",
+    fit: str | Path | GestaltFit,
     split: str = "train",
     max_samples: int | None = None,
     modality: str | None = None,
@@ -67,7 +51,7 @@ def run(
         cache_dir=cache_dir,
         batch_size=batch_size,
     )
-    fit_obj = _resolve_fit(fit, modality=source.modality)
+    fit_obj = fit if isinstance(fit, GestaltFit) else GestaltFit.from_pretrained(str(fit))
     S = fit_obj.transform(embeddings)
     print(f"[gestalt.run] {source.input}  modality={source.modality}  → shared latent {S.shape}")
     if out is not None:
